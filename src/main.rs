@@ -1,82 +1,69 @@
-use std::net::SocketAddr;
-use std::io::{Write, Read};
+mod certificates;
 
-use tokio::prelude::*;
-use tokio::net::TcpListener;
+use crate::certificates::create_signed_certificate_for_domain;
+use crate::certificates::CA;
 
-use openssl::ssl::{SslConnector, SslConnectorBuilder};
-use openssl::ssl::SslMethod;
-use tokio::net::TcpStream;
+mod http_proxy;
 
-async fn get_target_details(socket: &mut TcpStream) -> Result<(String, bool), std::io::Error> {
-    let mut buf = [0; 1024];
-    let mut headers = [httparse::EMPTY_HEADER; 16];
-    let mut req = httparse::Request::new(&mut headers);
-    let _n = match socket.peek(&mut buf).await {
-        Ok(n) => n,
-        Err(e) => {
-            println!("Failed to read from socket; err = {:?}", e);
-            return Err(e);
-        }
-    };
-    let res = req.parse(&mut buf).unwrap();
+use http_proxy::run_http_proxy;
 
-    let host = String::from_utf8(Vec::from(req.headers.iter()
-        .filter(|x| x.name == "Host")
-        .next()
-        //TODO I don't think we want unwrap here
-        .unwrap()
-        .value)).unwrap();
-    return Ok((host, req.method.unwrap() == "CONNECT"));
-}
+use std::fs::File;
+use std::io::Write;
+
+use clap::{Arg, ArgMatches, App, SubCommand};
+
+type SafeResult = Result<(), Box<dyn std::error::Error>>;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "127.0.0.1:8080".parse::<SocketAddr>()?;
-    let mut listener = TcpListener::bind(&addr).await?;
+async fn main() -> SafeResult {
+    let matches = App::new("third-wheel")
+        .version("0.1")
+        .author("Chris Campbell")
+        .about("A Rust clone of mitmproxy for fast and lightweight TLS proxying")
+        .subcommand(SubCommand::with_name("http-proxy")
+            .about("Run a simple http proxy")
+            .arg(Arg::with_name("port")
+                .short("p")
+                .help("Port to connect to")
+                .required(false)
+                .default_value("8080"))
+        )
+        .subcommand(SubCommand::with_name("sign-cert-for-domain")
+            .about("Sign a x509 certificate for a given domain")
+            .arg(Arg::from_usage("<DOMAIN> 'The domain to sign the certificate for'"))
+            .arg(Arg::from_usage("-o --outfile=[outfile] 'The file to store the certificate in'")
+                .default_value("site.pem"))
 
-    loop {
-        let (mut socket, _) = listener.accept().await?;
+            .arg(Arg::from_usage("-c --ca-cert-file=[cert_file] 'The pem file containing the ca certificate'")
+                .default_value("./ca/ca_certs/cert.pem"))
+            .arg(Arg::from_usage("-k --ca-key-file=[key_file] 'The pem file containing the ca key'")
+                .default_value("./ca/ca_certs/key.pem"))
+        )
+        .get_matches();
+    run(matches).await
+}
 
-        tokio::spawn(async move {
-            let (host, ssl) = get_target_details(&mut socket).await.unwrap();
-
-            if (ssl) {
-                //TODO: make this one work ;)
-                //TODO: For now we need to use a std TcpStream as the alpha tokio TcpStream doesn't implement Read
-                let mut stream = std::net::TcpStream::connect(format!("{}:443", host)).unwrap();
-                let ssl_connector = SslConnector::builder(SslMethod::tls()).unwrap().build();
-                let mut stream = ssl_connector.connect("google.com", stream).unwrap();
-            } else {
-                let mut target_stream = std::net::TcpStream::connect(format!("{}:80", host)).unwrap();
-                let mut buf = [0; 1024];
-                let n = match socket.read(&mut buf).await {
-                    Ok(n) if n == 0 => return,
-                    Ok(n) => n,
-                    Err(e) => {
-                        println!("Failed to read from socket; err = {:?}", e);
-                        return;
-                    }
-                };
-                if let Err(e) = target_stream.write_all(&buf[0..n]) {
-                    println!("failed to write to target socket; err = {:?}", e);
-                    return;
-                }
-                loop {
-                    let n = match target_stream.read(&mut buf) {
-                        Ok(n) if n == 0 => return,
-                        Ok(n) => n,
-                        Err(e) => {
-                            println!("Failed to read from socket; err = {:?}", e);
-                            return;
-                        }
-                    };
-                    if let Err(e) = socket.write_all(&buf[0..n]).await {
-                        println!("failed to write to target socket; err = {:?}", e);
-                        return;
-                    };
-                }
-            }
-        });
+async fn run(matches: ArgMatches<'_>) -> SafeResult {
+    match matches.subcommand() {
+        ("http-proxy", Some(m)) => run_http_proxy().await,
+        ("sign-cert-for-domain", Some(m)) => {
+            run_sign_certificate_for_domain(
+                m.value_of("outfile").unwrap(),
+                m.value_of("ca-cert-file").unwrap(),
+                m.value_of("ca-key-file").unwrap(),
+                m.value_of("DOMAIN").unwrap()
+            ).await
+        },
+        _ => Ok(())
     }
+//    Ok(())
+}
+
+async fn run_sign_certificate_for_domain(outfile: &str, cert_file: &str, key_file: &str, domain: &str) -> SafeResult {
+    let ca = CA::load_from_pem_files(cert_file, key_file)?;
+    let site_cert = create_signed_certificate_for_domain(domain, &ca)?;
+
+    let mut site_cert_file = File::create(outfile)?;
+    site_cert_file.write_all(&site_cert.to_pem()?)?;
+    Ok(())
 }
