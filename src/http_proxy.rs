@@ -1,8 +1,6 @@
 use std::io::{Read, Write};
 use std::net::SocketAddr;
 
-use openssl::ssl::SslConnector;
-use openssl::ssl::SslMethod;
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
@@ -18,7 +16,7 @@ async fn get_target_details(socket: &mut TcpStream) -> Result<(String, bool), st
             return Err(e);
         }
     };
-    let res = req.parse(&mut buf).unwrap();
+    let _res = req.parse(&mut buf).unwrap();
 
     let host = String::from_utf8(Vec::from(req.headers.iter()
         .filter(|x| x.name == "Host")
@@ -29,8 +27,11 @@ async fn get_target_details(socket: &mut TcpStream) -> Result<(String, bool), st
     return Ok((host, req.method.unwrap() == "CONNECT"));
 }
 
-pub async fn run_http_proxy() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "127.0.0.1:8080".parse::<SocketAddr>()?;
+pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>> {
+    let addr = format!("127.0.0.1:{}", port);
+    println!("http proxy listening on {}", addr);
+    let addr = addr.parse::<SocketAddr>()?;
+
     let mut listener = TcpListener::bind(&addr).await?;
 
     loop {
@@ -41,10 +42,7 @@ pub async fn run_http_proxy() -> Result<(), Box<dyn std::error::Error>> {
 
             if ssl {
                 //TODO: make this one work ;)
-                //TODO: For now we need to use a std TcpStream as the alpha tokio TcpStream doesn't implement Read
-                let mut stream = std::net::TcpStream::connect(format!("{}:443", host)).unwrap();
-                let ssl_connector = SslConnector::builder(SslMethod::tls()).unwrap().build();
-                let mut stream = ssl_connector.connect("google.com", stream).unwrap();
+                unimplemented!();
             } else {
                 let mut target_stream = std::net::TcpStream::connect(format!("{}:80", host)).unwrap();
                 let mut buf = [0; 1024];

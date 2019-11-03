@@ -26,7 +26,12 @@ async fn main() -> SafeResult {
                 .short("p")
                 .help("Port to connect to")
                 .required(false)
-                .default_value("8080"))
+                .default_value("8080")
+                .validator(|p| if let Err(_e) = p.parse::<u16>() {
+                    Err(String::from("Expected an integer"))
+                } else { Ok(()) }
+                )
+            )
         )
         .subcommand(SubCommand::with_name("sign-cert-for-domain")
             .about("Sign a x509 certificate for a given domain")
@@ -45,13 +50,15 @@ async fn main() -> SafeResult {
 
 async fn run(matches: ArgMatches<'_>) -> SafeResult {
     match matches.subcommand() {
-        ("http-proxy", Some(m)) => run_http_proxy().await,
+        ("http-proxy", Some(m)) => run_http_proxy(
+            m.value_of("port").unwrap().parse().unwrap()
+        ).await,
         ("sign-cert-for-domain", Some(m)) => {
             run_sign_certificate_for_domain(
                 m.value_of("outfile").unwrap(),
                 m.value_of("ca-cert-file").unwrap(),
                 m.value_of("ca-key-file").unwrap(),
-                m.value_of("DOMAIN").unwrap()
+                m.value_of("DOMAIN").unwrap(),
             ).await
         },
         _ => Ok(())
