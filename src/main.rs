@@ -7,10 +7,24 @@ mod http_proxy;
 
 use http_proxy::run_http_proxy;
 
+mod codecs;
+
+use codecs::server_side::HttpServerSide;
+use codecs::client_side::HttpClientSide;
+
 use std::fs::File;
 use std::io::Write;
 
 use clap::{Arg, ArgMatches, App, SubCommand};
+use bytes::{BytesMut, BufMut};
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
+use tokio::codec::Framed;
+use futures_util::{SinkExt, StreamExt};
+use http::Response;
+use http::Version;
+use tokio::net::TcpStream;
+use http::header::HeaderName;
 
 type SafeResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -43,13 +57,14 @@ async fn main() -> SafeResult {
                 .default_value("./ca/ca_certs/cert.pem"))
             .arg(Arg::from_usage("-k --ca-key-file=[key_file] 'The pem file containing the ca key'")
                 .default_value("./ca/ca_certs/key.pem"))
-        )
+        ).subcommand(SubCommand::with_name("testing"))
         .get_matches();
     run(matches).await
 }
 
 async fn run(matches: ArgMatches<'_>) -> SafeResult {
     match matches.subcommand() {
+        ("testing", Some(_m)) => testing_main().await,
         ("http-proxy", Some(m)) => run_http_proxy(
             m.value_of("port").unwrap().parse().unwrap()
         ).await,
@@ -60,10 +75,45 @@ async fn run(matches: ArgMatches<'_>) -> SafeResult {
                 m.value_of("ca-key-file").unwrap(),
                 m.value_of("DOMAIN").unwrap(),
             ).await
-        },
+        }
         _ => Ok(())
     }
-//    Ok(())
+}
+
+async fn testing_main() -> SafeResult {
+    let port: u16 = 8080;
+    let addr = format!("127.0.0.1:{}", port);
+    let addr = addr.parse::<SocketAddr>()?;
+
+    let mut incoming = TcpListener::bind(&addr).await?;
+    println!("http proxy listening on {}", addr);
+    let (mut stream, _) = incoming.accept().await?;
+    let mut transport = Framed::new(stream, HttpServerSide);
+    while let Some(request) = transport.next().await {
+        match request {
+            Ok(request) => {
+                dbg!(&request);
+                let host = String::from_utf8(Vec::from(request.headers().iter()
+                    .filter(|x| x.0 == "Host")
+                    .next()
+                    //TODO I don't think we want unwrap here
+                    .unwrap()
+                    .1.as_bytes())).unwrap();
+
+                let mut target_stream = TcpStream::connect(format!("{}:80", host)).await?;
+                let mut target_transport = Framed::new(target_stream, HttpClientSide);
+                target_transport.send(request).await;
+                dbg!();
+                let response = target_transport.next().await.unwrap().expect("valid http response");
+                dbg!(&response);
+                transport.send(response).await?;
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+
+    Ok(())
 }
 
 async fn run_sign_certificate_for_domain(outfile: &str, cert_file: &str, key_file: &str, domain: &str) -> SafeResult {

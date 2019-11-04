@@ -1,9 +1,13 @@
-use std::io::{Read, Write};
+use std::io::{Read, Write, Error, ErrorKind};
 use std::net::SocketAddr;
+
+use bytes::{BytesMut, BufMut};
 
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
+use crate::SafeResult;
+
 
 async fn get_target_details(socket: &mut TcpStream) -> Result<(String, bool), std::io::Error> {
     let mut buf = [0; 1024];
@@ -27,6 +31,22 @@ async fn get_target_details(socket: &mut TcpStream) -> Result<(String, bool), st
     return Ok((host, req.method.unwrap() == "CONNECT"));
 }
 
+//pub async fn get_request(socket: &mut TcpStream) -> Result<BytesMut, std::io::Error> {
+//    let mut buf = BytesMut::with_capacity(24_000);
+//    let mut headers = [httparse::EMPTY_HEADER; 16];
+//    let mut req = httparse::Request::new(&mut headers);
+//    loop {
+//        socket.read(&mut buf).await;
+//        if buf.len() == 24_000 {
+//            return Err(Error::new(ErrorKind::Other, "Request too large"));
+//        }
+//        let res = req.parse(&buf).unwrap();
+//        if !res.is_partial() { break; }
+//    }
+//
+//    return Ok(buf);
+//}
+
 pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("127.0.0.1:{}", port);
     println!("http proxy listening on {}", addr);
@@ -45,7 +65,7 @@ pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>>
                 unimplemented!();
             } else {
                 let mut target_stream = std::net::TcpStream::connect(format!("{}:80", host)).unwrap();
-                let mut buf = [0; 1024];
+                let mut buf = [0; 24 * 1000];
                 let n = match socket.read(&mut buf).await {
                     Ok(n) if n == 0 => return,
                     Ok(n) => n,
@@ -76,3 +96,10 @@ pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>>
         });
     }
 }
+
+
+// HTTP 1.0 - https://www.w3.org/Protocols/HTTP/1.0/spec.html#BodyLength
+// To tell how many bytes to pull off the wire in 1.0 you need read enough of the bytes to get the
+// Content-length header. But sometimes the server won't send the content-length header and
+// closing the connection means it's done sending.
+
