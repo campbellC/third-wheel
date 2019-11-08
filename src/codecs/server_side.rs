@@ -30,6 +30,7 @@ use bytes::BytesMut;
 use http::{header::HeaderValue, Request, Response, StatusCode};
 use std::{env, error::Error, fmt, io};
 use std::str::FromStr;
+use super::client_side::BodyParser;
 
 pub struct HttpServerSide;
 
@@ -93,7 +94,7 @@ impl Decoder for HttpServerSide {
         // TODO: we should grow this headers array if parsing fails and asks
         //       for more headers
         let mut headers = [None; 16];
-        let (method, path, version, amt) = {
+        let (method, path, version, amt, body_parser) = {
             let mut parsed_headers = [httparse::EMPTY_HEADER; 16];
             let mut r = httparse::Request::new(&mut parsed_headers);
             let status = r.parse(src).map_err(|e| {
@@ -113,7 +114,14 @@ impl Decoder for HttpServerSide {
                 (start, start + a.len())
             };
 
+            let mut body_parser: BodyParser = BodyParser::OTHER;
             for (i, header) in r.headers.iter().enumerate() {
+                if header.name.to_lowercase() == "transfer-encoding" {
+                    assert!(header.value == b"chunked");
+                    body_parser = BodyParser::CHUNKED;
+                } else if header.name.to_lowercase() == "content-length" {
+                    body_parser = BodyParser::CONTENT_LENGTH(String::from_utf8(header.value.to_vec()).unwrap().parse().unwrap())
+                }
                 let k = toslice(header.name.as_bytes());
                 let v = toslice(header.value);
                 headers[i] = Some((k, v));
@@ -124,6 +132,7 @@ impl Decoder for HttpServerSide {
                 toslice(r.path.unwrap().as_bytes()),
                 r.version.unwrap(),
                 amt,
+                body_parser,
             )
         };
         if version != 1 {
@@ -132,6 +141,7 @@ impl Decoder for HttpServerSide {
                 "only HTTP/1.1 accepted",
             ));
         }
+        if !body_parser.is_complete(&src[amt..]) { return Ok(None); }
         let data = src.split_to(amt).freeze();
         let mut ret = Request::builder();
         ret.method(&data[method.0..method.1]);

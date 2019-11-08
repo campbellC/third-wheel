@@ -5,6 +5,9 @@ use bytes::BytesMut;
 use tokio::codec::Decoder;
 use http::Response;
 use http::HeaderValue;
+use httparse::parse_chunk_size;
+use httparse::Status;
+use crate::codecs::client_side::BodyParser::OTHER;
 
 pub struct HttpClientSide;
 
@@ -14,7 +17,6 @@ impl Encoder for HttpClientSide {
 
     fn encode(&mut self, item: Request<Vec<u8>>, dst: &mut BytesMut) -> io::Result<()> {
         use std::fmt::Write;
-        dbg!();
         write!(
             BytesWrite(dst),
             "\
@@ -59,6 +61,43 @@ impl Encoder for HttpClientSide {
     }
 }
 
+#[derive(Debug)]
+pub(super) enum BodyParser {
+    CHUNKED,
+    CONTENT_LENGTH(usize),
+    OTHER,
+}
+
+impl BodyParser {
+    pub(super) fn is_complete(&self, bytes: &[u8]) -> bool {
+        match self {
+            &Self::CHUNKED => {
+                let mut current: usize = 0;
+                loop {
+                    match parse_chunk_size(&bytes[current..]) {
+                        Err(_) | Ok(Status::Partial) => return false,
+                        Ok(Status::Complete((n, m))) => {
+                            let m = m as usize;
+                            if m == 0 {
+                                return true;
+                            }
+                            else if current + n + m > bytes.len() {
+                                return false;
+                            } else {
+                                current += n + m;
+                            }
+                        }
+                    };
+                }
+            }
+            &Self::CONTENT_LENGTH(length) => {
+                return if length > bytes.len() { false } else { true };
+            }
+            &Self::OTHER => {return true;},
+        }
+    }
+}
+
 impl Decoder for HttpClientSide {
     type Item = Response<Vec<u8>>;
     type Error = io::Error;
@@ -67,7 +106,7 @@ impl Decoder for HttpClientSide {
         // TODO: we should grow this headers array if parsing fails and asks
         //       for more headers
         let mut headers = [None; 16];
-        let (status, reason, version, amt) = {
+        let (status, reason, version, amt, body_parser) = {
             let mut parsed_headers = [httparse::EMPTY_HEADER; 16];
             let mut r = httparse::Response::new(&mut parsed_headers);
             let status = r.parse(src).map_err(|e| {
@@ -78,9 +117,8 @@ impl Decoder for HttpClientSide {
             let amt = match status {
                 httparse::Status::Complete(amt) => amt,
                 httparse::Status::Partial => {
-                    dbg!();
                     return Ok(None);
-                },
+                }
             };
 
             let toslice = |a: &[u8]| {
@@ -89,7 +127,14 @@ impl Decoder for HttpClientSide {
                 (start, start + a.len())
             };
 
+            let mut body_parser: BodyParser = OTHER;
             for (i, header) in r.headers.iter().enumerate() {
+                if header.name.to_lowercase() == "transfer-encoding" {
+                    assert!(header.value == b"chunked");
+                    body_parser = BodyParser::CHUNKED;
+                } else if header.name.to_lowercase() == "content-length" {
+                    body_parser = BodyParser::CONTENT_LENGTH(String::from_utf8(header.value.to_vec()).unwrap().parse().unwrap())
+                }
                 let k = toslice(header.name.as_bytes());
                 let v = toslice(header.value);
                 headers[i] = Some((k, v));
@@ -98,16 +143,18 @@ impl Decoder for HttpClientSide {
                 r.code.unwrap(),
                 toslice(r.reason.unwrap().as_bytes()),
                 r.version.unwrap(),
-                amt
+                amt,
+                body_parser,
             )
         };
         //TODO handle HTTP/1.0
-//        if version != 1 {
-//            return Err(io::Error::new(
-//                io::ErrorKind::Other,
-//                format!("only HTTP/1.1 accepted but received {}", String::from_utf8(src.to_vec()).unwrap())
-//            ));
-//        }
+        if version != 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("only HTTP/1.1 accepted but received {}", String::from_utf8(src.to_vec()).unwrap()),
+            ));
+        }
+        if !body_parser.is_complete(&src[amt..]) { return Ok(None); }
         let data = src.split_to(amt).freeze();
         let mut ret = Response::builder();
         ret.status(status);
@@ -115,10 +162,10 @@ impl Decoder for HttpClientSide {
         ret.version(http::Version::HTTP_11);
         for header in headers.iter() {
             let (k, v) = match *header {
-                Some((ref k, ref v)) => (k,v),
+                Some((ref k, ref v)) => (k, v),
                 None => break,
             };
-            let value = unsafe {HeaderValue::from_shared_unchecked(data.slice(v.0, v.1))};
+            let value = unsafe { HeaderValue::from_shared_unchecked(data.slice(v.0, v.1)) };
             ret.header(&data[k.0..k.1], value);
         }
 
