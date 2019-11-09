@@ -81,35 +81,6 @@ async fn run(matches: ArgMatches<'_>) -> SafeResult {
 }
 
 async fn testing_main() -> SafeResult {
-    let port: u16 = 8080;
-    let addr = format!("127.0.0.1:{}", port);
-    let addr = addr.parse::<SocketAddr>()?;
-    let mut incoming = TcpListener::bind(&addr).await?;
-    println!("http proxy listening on {}", addr);
-    let (mut stream, _) = incoming.accept().await?;
-    let mut transport = Framed::new(stream, HttpServerSide);
-    while let Some(request) = transport.next().await {
-        match request {
-            Ok(request) => {
-                dbg!(&request);
-                let host = String::from_utf8(Vec::from(request.headers().iter()
-                    .filter(|x| x.0 == "Host")
-                    .next()
-                    //TODO I don't think we want unwrap here
-                    .unwrap()
-                    .1.as_bytes())).unwrap();
-
-                let mut target_stream = TcpStream::connect(format!("{}:80", host)).await?;
-                let mut target_transport = Framed::new(target_stream, HttpClientSide);
-                target_transport.send(request).await;
-                let response = target_transport.next().await.unwrap().expect("valid http response");
-                transport.send(response).await?;
-            }
-            Err(e) => return Err(e.into()),
-        }
-    }
-
-
     Ok(())
 }
 

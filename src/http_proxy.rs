@@ -7,45 +7,10 @@ use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
 use crate::SafeResult;
-
-
-async fn get_target_details(socket: &mut TcpStream) -> Result<(String, bool), std::io::Error> {
-    let mut buf = [0; 1024];
-    let mut headers = [httparse::EMPTY_HEADER; 16];
-    let mut req = httparse::Request::new(&mut headers);
-    let _n = match socket.peek(&mut buf).await {
-        Ok(n) => n,
-        Err(e) => {
-            println!("Failed to read from socket; err = {:?}", e);
-            return Err(e);
-        }
-    };
-    let _res = req.parse(&mut buf).unwrap();
-
-    let host = String::from_utf8(Vec::from(req.headers.iter()
-        .filter(|x| x.name == "Host")
-        .next()
-        //TODO I don't think we want unwrap here
-        .unwrap()
-        .value)).unwrap();
-    return Ok((host, req.method.unwrap() == "CONNECT"));
-}
-
-//pub async fn get_request(socket: &mut TcpStream) -> Result<BytesMut, std::io::Error> {
-//    let mut buf = BytesMut::with_capacity(24_000);
-//    let mut headers = [httparse::EMPTY_HEADER; 16];
-//    let mut req = httparse::Request::new(&mut headers);
-//    loop {
-//        socket.read(&mut buf).await;
-//        if buf.len() == 24_000 {
-//            return Err(Error::new(ErrorKind::Other, "Request too large"));
-//        }
-//        let res = req.parse(&buf).unwrap();
-//        if !res.is_partial() { break; }
-//    }
-//
-//    return Ok(buf);
-//}
+use tokio::codec::Framed;
+use crate::codecs::server_side::HttpServerSide;
+use http::Request;
+use crate::codecs::client_side::HttpClientSide;
 
 pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("127.0.0.1:{}", port);
@@ -55,51 +20,30 @@ pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>>
     let mut listener = TcpListener::bind(&addr).await?;
 
     loop {
-        let (mut socket, _) = listener.accept().await?;
-
+        let (mut stream, _) = listener.accept().await?;
         tokio::spawn(async move {
-            let (host, ssl) = get_target_details(&mut socket).await.unwrap();
-
-            if ssl {
-                //TODO: make this one work ;)
-                unimplemented!();
-            } else {
-                let mut target_stream = std::net::TcpStream::connect(format!("{}:80", host)).unwrap();
-                let mut buf = [0; 24 * 1000];
-                let n = match socket.read(&mut buf).await {
-                    Ok(n) if n == 0 => return,
-                    Ok(n) => n,
-                    Err(e) => {
-                        println!("Failed to read from socket; err = {:?}", e);
-                        return;
+            let mut transport = Framed::new(stream, HttpServerSide);
+            while let Some(request) = transport.next().await {
+                match request {
+                    Ok(request) => {
+                        let host = String::from_utf8(Vec::from(request.headers().iter()
+                            .filter(|x| x.0 == "Host")
+                            .next()
+                            .unwrap()
+                            .1.as_bytes())).unwrap();
+                        // This cannot be inlined due to a compiler issue
+                        // https://github.com/rust-lang/rust/issues/64477
+                        let target_address = format!("{}:80", host);
+                        let target_stream = TcpStream::connect(target_address).await.unwrap();
+                        let mut target_transport = Framed::new(target_stream, HttpClientSide);
+                        target_transport.send(request).await.unwrap();
+                        let response = target_transport.next().await.unwrap().expect("valid http response");
+                        transport.send(response).await.unwrap();
                     }
-                };
-                if let Err(e) = target_stream.write_all(&buf[0..n]) {
-                    println!("failed to write to target socket; err = {:?}", e);
-                    return;
-                }
-                loop {
-                    let n = match target_stream.read(&mut buf) {
-                        Ok(n) if n == 0 => return,
-                        Ok(n) => n,
-                        Err(e) => {
-                            println!("Failed to read from socket; err = {:?}", e);
-                            return;
-                        }
-                    };
-                    if let Err(e) = socket.write_all(&buf[0..n]).await {
-                        println!("failed to write to target socket; err = {:?}", e);
-                        return;
-                    };
+                    Err(e) => {dbg!(e);},
                 }
             }
         });
     }
 }
-
-
-// HTTP 1.0 - https://www.w3.org/Protocols/HTTP/1.0/spec.html#BodyLength
-// To tell how many bytes to pull off the wire in 1.0 you need read enough of the bytes to get the
-// Content-length header. But sometimes the server won't send the content-length header and
-// closing the connection means it's done sending.
 
