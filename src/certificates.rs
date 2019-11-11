@@ -7,8 +7,8 @@ use openssl::pkey::{PKey, Private};
 use openssl::rsa::Rsa;
 use openssl::hash::MessageDigest;
 use openssl::bn::{BigNum, MsbOption};
-use openssl::x509::extension::SubjectAlternativeName;
-use openssl::x509::extension::AuthorityKeyIdentifier;
+use openssl::x509::extension::{AuthorityKeyIdentifier,SubjectAlternativeName};
+use openssl::pkcs12::Pkcs12;
 
 pub struct CA {
     pub(self) cert: X509,
@@ -29,6 +29,19 @@ impl CA {
 
         Ok(CA { cert, key })
     }
+}
+
+pub(crate) fn load_key_from_file(key_file: &str) -> Result<PKey<Private>, Box<dyn std::error::Error>> {
+    let mut key_file = File::open(key_file)?;
+    let mut key: Vec<u8> = vec![];
+    io::copy(&mut key_file, &mut key)?;
+    //TODO: this unwrap doesn't feel right, need to get the types to match up properly
+    Ok(PKey::from_rsa(Rsa::private_key_from_pem(&key)?).unwrap())
+}
+
+pub(crate) fn native_identity(certificate: &X509, key: &PKey<Private>) -> native_tls::Identity {
+    let pkcs = Pkcs12::builder().build(&"", &"", key, certificate).unwrap().to_der().unwrap();
+    native_tls::Identity::from_pkcs12(&pkcs, &"").unwrap()
 }
 
 

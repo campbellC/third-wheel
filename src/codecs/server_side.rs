@@ -146,7 +146,12 @@ impl Decoder for HttpServerSide {
         let mut ret = Request::builder();
         ret.method(&data[method.0..method.1]);
         let uri = http::Uri::from_str(&String::from_utf8(data.slice(path.0, path.1).to_vec()).unwrap());
-        ret.uri(uri.unwrap().path());
+        dbg!(&uri);
+        if ret.method_ref().unwrap() == http::Method::CONNECT {
+            ret.uri(uri.unwrap());
+        } else {
+            ret.uri(uri.unwrap().path());
+        }
         ret.version(http::Version::HTTP_11);
         for header in headers.iter() {
             let (k, v) = match *header {
