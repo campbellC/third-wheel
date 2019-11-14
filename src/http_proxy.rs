@@ -1,24 +1,21 @@
-use std::io::{Error, ErrorKind, Read, Write};
 use std::net::SocketAddr;
 
-use bytes::{BufMut, BytesMut};
 use http::{Request, Response};
 use openssl::x509::X509;
 use openssl::pkey::{PKey, Private};
 use tokio::codec::Framed;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
-use tokio_tls::{TlsAcceptor, TlsConnector, TlsStream};
+use tokio_tls::{TlsAcceptor, TlsStream};
 
 use crate::certificates::{create_signed_certificate_for_domain, load_key_from_file, native_identity, CA};
-use crate::codecs::client_side::HttpClientSide;
-use crate::codecs::server_side::HttpServerSide;
+use crate::codecs::http11::{HttpServer, HttpClient};
 use crate::SafeResult;
-use futures_util::try_future::TryFutureExt;
 
+//TODO: Create certificate authority if it doesn't already exist, or at least warn about it
 lazy_static! {
-    static ref ca: crate::certificates::CA = CA::load_from_pem_files("ca/ca_certs/cert.pem", "ca/ca_certs/key.pem").unwrap();
-    static ref key: PKey<Private> = load_key_from_file("ca/ca_certs/key.pem").unwrap();
+    static ref CERT_AUTH: crate::certificates::CA = CA::load_from_pem_files("ca/ca_certs/cert.pem", "ca/ca_certs/key.pem").unwrap();
+    static ref KEY: PKey<Private> = load_key_from_file("ca/ca_certs/key.pem").unwrap();
 }
 
 pub async fn start_mitm(port: u16) -> Result<(), Box<dyn std::error::Error>> {
@@ -29,8 +26,8 @@ pub async fn start_mitm(port: u16) -> Result<(), Box<dyn std::error::Error>> {
 
 
     loop {
-        let (mut new_client_stream, _) = new_client_listener.accept().await?;
-        let mut transport = Framed::new(new_client_stream, HttpServerSide);
+        let (new_client_stream, _) = new_client_listener.accept().await?;
+        let mut transport = Framed::new(new_client_stream, HttpClient);
         if let Some(proxy_opening_request) = transport.next().await {
             match proxy_opening_request {
                 Ok(proxy_opening_request) => {
@@ -47,14 +44,13 @@ pub async fn start_mitm(port: u16) -> Result<(), Box<dyn std::error::Error>> {
             unimplemented!();
         }
     }
-    Ok(())
 }
 
-async fn tls_mitm_wrapper(mut client_stream: Framed<TcpStream, HttpServerSide>, opening_request: Request<Vec<u8>>) {
-    tls_mitm(client_stream, opening_request, &ca, &key).await.unwrap();
+async fn tls_mitm_wrapper(client_stream: Framed<TcpStream, HttpClient>, opening_request: Request<Vec<u8>>) {
+    tls_mitm(client_stream, opening_request, &CERT_AUTH, &KEY).await.unwrap();
 }
 
-async fn tls_mitm(mut client_stream: Framed<TcpStream, HttpServerSide>, opening_request: Request<Vec<u8>>, cert_auth: &CA, private_key: &PKey<Private>) -> SafeResult {
+async fn tls_mitm(mut client_stream: Framed<TcpStream, HttpClient>, opening_request: Request<Vec<u8>>, cert_auth: &CA, private_key: &PKey<Private>) -> SafeResult {
     let (host, port) = target_host_port(&opening_request);
     let (mut target_stream, _server_certificate) = connect_to_target(&host, &port).await;
     client_stream.send(
@@ -85,11 +81,11 @@ async fn tls_mitm(mut client_stream: Framed<TcpStream, HttpServerSide>, opening_
     Ok(())
 }
 
-async fn convert_to_tls(client_stream: Framed<TcpStream, HttpServerSide>, identity: native_tls::Identity) -> Framed<TlsStream<TcpStream>, HttpServerSide> {
+async fn convert_to_tls(client_stream: Framed<TcpStream, HttpClient>, identity: native_tls::Identity) -> Framed<TlsStream<TcpStream>, HttpClient> {
     let client_stream = client_stream.into_inner();
     let client = TlsAcceptor::from(native_tls::TlsAcceptor::new(identity).unwrap());
     let client_stream = client.accept(client_stream).await.unwrap();
-    Framed::new(client_stream, HttpServerSide)
+    Framed::new(client_stream, HttpClient)
 }
 
 fn target_host_port(request: &Request<Vec<u8>>) -> (String, String) {
@@ -102,7 +98,7 @@ fn target_host_port(request: &Request<Vec<u8>>) -> (String, String) {
     (pieces[0].to_string(), pieces[1].to_string())
 }
 
-async fn connect_to_target(host: &str, port: &str) -> (Framed<TlsStream<TcpStream>, HttpClientSide>, X509) {
+async fn connect_to_target(host: &str, port: &str) -> (Framed<TlsStream<TcpStream>, HttpServer>, X509) {
     //This format! *cannot* be inlined due to a compiler issue
     // https://github.com/rust-lang/rust/issues/64477
     let target_address = format!("{}:{}", host, port);
@@ -115,7 +111,7 @@ async fn connect_to_target(host: &str, port: &str) -> (Framed<TlsStream<TcpStrea
         &target_stream.peer_certificate()
             .unwrap().unwrap().to_der().unwrap()
     ).unwrap();
-    (Framed::new(target_stream, HttpClientSide), certificate)
+    (Framed::new(target_stream, HttpServer), certificate)
 }
 
 pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>> {
@@ -126,9 +122,9 @@ pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>>
     let mut listener = TcpListener::bind(&addr).await?;
 
     loop {
-        let (mut stream, _) = listener.accept().await?;
+        let (stream, _) = listener.accept().await?;
         tokio::spawn(async move {
-            let mut transport = Framed::new(stream, HttpServerSide);
+            let mut transport = Framed::new(stream, HttpClient);
             while let Some(request) = transport.next().await {
                 match request {
                     Ok(request) => {
@@ -141,7 +137,7 @@ pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>>
                         // https://github.com/rust-lang/rust/issues/64477
                         let target_address = format!("{}:80", host);
                         let target_stream = TcpStream::connect(target_address).await.unwrap();
-                        let mut target_transport = Framed::new(target_stream, HttpClientSide);
+                        let mut target_transport = Framed::new(target_stream, HttpServer);
                         target_transport.send(request).await.unwrap();
                         let response = target_transport.next().await.unwrap().expect("valid http response");
                         transport.send(response).await.unwrap();

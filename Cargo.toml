@@ -17,5 +17,6 @@ native-tls = "0.2.3"
 # currently tokio-tls doesn't expose the native_tls TlsStream. To get access to certificates we need that so we use a fork
 # https://github.com/tokio-rs/tokio/issues/1383
 #tokio-tls = "0.3.0-alpha.6"
-tokio-tls = { git = "https://github.com/campbellC/tokio", rev = "9f1158280a26f3682dc877720e0eea8e0da9663f", path="tokio-tls"}
+tokio-tls = { git = "https://github.com/campbellC/tokio", rev = "9f1158280a26f3682dc877720e0eea8e0da9663f"}
 lazy_static = "1.4.0"
+

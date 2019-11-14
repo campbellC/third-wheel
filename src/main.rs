@@ -9,23 +9,18 @@ use http_proxy::{start_mitm,run_http_proxy};
 
 mod codecs;
 
-use codecs::server_side::HttpServerSide;
-use codecs::client_side::HttpClientSide;
+use codecs::http11::{HttpServer, HttpClient};
 
 use std::fs::File;
 use std::io::Write;
 
 use clap::{Arg, ArgMatches, App, SubCommand};
-use bytes::{BytesMut, BufMut};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tokio::codec::Framed;
 use futures_util::{SinkExt, StreamExt};
-use http::Response;
-use http::Version;
 use tokio::net::TcpStream;
 use native_tls::TlsConnector;
-use http::header::HeaderName;
 use tokio_tls::TlsAcceptor;
 use openssl::pkcs12::Pkcs12;
 use openssl::pkey::PKey;
@@ -111,8 +106,8 @@ async fn testing_main() -> SafeResult {
 
     let mut listener = TcpListener::bind(&addr).await?;
 
-    let (mut stream, _) = listener.accept().await?;
-    let mut transport = Framed::new(stream, HttpServerSide);
+    let (stream, _) = listener.accept().await?;
+    let mut transport = Framed::new(stream, HttpClient);
     if let Some(request) = transport.next().await {
         match request {
             Ok(request) => {
@@ -133,9 +128,9 @@ async fn testing_main() -> SafeResult {
                 let connector = TlsConnector::builder().build().unwrap();
                 let tokio_connector = tokio_tls::TlsConnector::from(connector);
                 let target_stream = tokio_connector.connect(&host, target_stream).await.unwrap();
-                let certificate = openssl::x509::X509::from_der(&target_stream.peer_certificate().unwrap().unwrap().to_der().unwrap()).unwrap();
-                let mut target_transport = Framed::new(target_stream, HttpClientSide);
-                transport.send(http::Response::builder().status(200).version(http::Version::HTTP_11).body(Vec::new()).unwrap()).await;
+                let _certificate = openssl::x509::X509::from_der(&target_stream.peer_certificate().unwrap().unwrap().to_der().unwrap()).unwrap();
+                let mut target_transport = Framed::new(target_stream, HttpServer);
+                transport.send(http::Response::builder().status(200).version(http::Version::HTTP_11).body(Vec::new()).unwrap()).await.unwrap();
                 //TODO: don't just sign a new cert but actually solve the problem
                 let ca = CA::load_from_pem_files("ca/ca_certs/cert.pem", "ca/ca_certs/key.pem").unwrap();
                 let certificate = create_signed_certificate_for_domain(&host, &ca).unwrap();
@@ -152,7 +147,7 @@ async fn testing_main() -> SafeResult {
                 let identity = native_tls::Identity::from_pkcs12(&pkcs, &"").unwrap();
                 let client = TlsAcceptor::from(native_tls::TlsAcceptor::new(identity).unwrap());
                 let client_stream = client.accept(client_stream).await.unwrap();
-                let mut transport = Framed::new(client_stream, HttpServerSide);
+                let mut transport = Framed::new(client_stream, HttpClient);
 
 
                 if let Some(request) = transport.next().await {
