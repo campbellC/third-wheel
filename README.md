@@ -11,6 +11,12 @@ cargo run -- mitm -p 8080
 ``` 
 will get it running.
 
+To test you can run curl against it with
+```
+curl -x http://127.0.0.1:8080 https://google.com -vv --http1.1 --cacert ./ca/ca_certs/cert.pem -L
+```
+from the third-wheel directory. You'll need to have run `set_up_and_validate_environment.sh` first as the root certificates are not generated on the fly yet.
+
 #### Development
 If you want to develop/use third-wheel while still in early stages you will need to generate the certificate authority certificates and check your local version of curl and openssl are working as expected. Run the `set_up_and_validate_environment.sh` script to do this.
 
