@@ -8,7 +8,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 use tokio_tls::{TlsAcceptor, TlsStream};
 
-use crate::certificates::{create_signed_certificate_for_domain, load_key_from_file, native_identity, CA};
+use crate::certificates::{load_key_from_file, native_identity, CA, spoof_certificate};
 use crate::codecs::http11::{HttpServer, HttpClient};
 use crate::SafeResult;
 
@@ -52,7 +52,7 @@ async fn tls_mitm_wrapper(client_stream: Framed<TcpStream, HttpClient>, opening_
 
 async fn tls_mitm(mut client_stream: Framed<TcpStream, HttpClient>, opening_request: Request<Vec<u8>>, cert_auth: &CA, private_key: &PKey<Private>) -> SafeResult {
     let (host, port) = target_host_port(&opening_request);
-    let (mut target_stream, _server_certificate) = connect_to_target(&host, &port).await;
+    let (mut target_stream, server_certificate) = connect_to_target(&host, &port).await;
     client_stream.send(
         Response::builder()
             .status(200)
@@ -62,7 +62,7 @@ async fn tls_mitm(mut client_stream: Framed<TcpStream, HttpClient>, opening_requ
     ).await?;
 
     //TODO: don't just sign a new cert but actually copy all of the components
-    let certificate = create_signed_certificate_for_domain(&host, &cert_auth).unwrap();
+    let certificate = spoof_certificate(&server_certificate, cert_auth).unwrap();
     let identity = native_identity(&certificate, private_key);
     let mut client_stream = convert_to_tls(client_stream, identity).await;
 

@@ -1,13 +1,13 @@
 use std::fs::File;
 use std::io;
 
-use openssl::x509::{X509, X509Name};
+use openssl::x509::{X509, X509Name, X509NameRef};
 use openssl::asn1::Asn1Time;
 use openssl::pkey::{PKey, Private};
 use openssl::rsa::Rsa;
 use openssl::hash::MessageDigest;
 use openssl::bn::{BigNum, MsbOption};
-use openssl::x509::extension::{AuthorityKeyIdentifier,SubjectAlternativeName};
+use openssl::x509::extension::{AuthorityKeyIdentifier, SubjectAlternativeName};
 use openssl::pkcs12::Pkcs12;
 
 pub struct CA {
@@ -71,6 +71,77 @@ pub(crate) fn create_signed_certificate_for_domain(domain: &str, ca: &CA) -> Res
         .dns(domain)
         .build(&cert_builder.x509v3_context(Some(&ca.cert), None))?;
     cert_builder.append_extension(subject_alternative_name)?;
+
+    let authority_key_identifier = AuthorityKeyIdentifier::new()
+        .keyid(false)
+        .issuer(false)
+        .build(&cert_builder.x509v3_context(Some(&ca.cert), None))?;
+    cert_builder.append_extension(authority_key_identifier)?;
+
+    cert_builder.set_issuer_name(&ca.cert.issuer_name())?;
+    cert_builder.set_pubkey(&ca.key)?;
+    cert_builder.sign(&ca.key, MessageDigest::sha256())?;
+
+
+    Ok(cert_builder.build())
+}
+
+fn copy_name(in_name: &X509NameRef) -> X509Name {
+    let mut copy = X509Name::builder().unwrap();
+    for entry in in_name.entries() {
+        copy.append_entry_by_nid(
+            entry.object().nid(),
+            entry.data().as_utf8().expect("Expected string as entry in name").as_ref(),
+        ).expect("Failed to add entry by nid");
+    }
+
+    copy.build()
+}
+
+fn copy_alt_names(in_cert: &X509) -> Option<SubjectAlternativeName> {
+    match in_cert.subject_alt_names() {
+        Some(in_alt_names) => {
+            let mut subject_alternative_name = SubjectAlternativeName::new();
+            for gn in in_alt_names {
+                if let Some(email) = gn.email() {
+                    subject_alternative_name.email(email);
+                } else if let Some(dns) = gn.dnsname() {
+                    subject_alternative_name.dns(dns);
+                } else if let Some(uri) = gn.uri() {
+                    subject_alternative_name.uri(uri);
+                } else if let Some(ipaddress) = gn.ipaddress() {
+                    //TODO: The openssl library exposes .ipaddress -> &[u8] and the builder wants &str
+                    //TODO: I have no idea whether this is u8 ascii representation of the ip or what so
+                    //TODO: lets just go with it for now.
+                    subject_alternative_name.ip(&String::from_utf8(ipaddress.to_vec())
+                        .expect("ip address on certificate is not formatted as ascii"));
+                }
+            }
+            Some(subject_alternative_name)
+        }
+        None => None
+    }
+}
+
+pub(crate) fn spoof_certificate(certificate: &X509, ca: &CA) -> Result<X509, Box<dyn std::error::Error>> {
+    let mut cert_builder = X509::builder()?;
+
+    let name: &X509NameRef = certificate.subject_name();
+    let host_name = copy_name(name);
+    cert_builder.set_subject_name(&host_name)?;
+    cert_builder.set_not_before(certificate.not_before())?;
+    cert_builder.set_not_after(certificate.not_after())?;
+
+    cert_builder.set_serial_number(certificate.serial_number())?;
+
+
+    //TODO: is this supposed to be set based on the certificate given?
+    cert_builder.set_version(3)?;
+
+    if let Some(subject_alternative_name) = copy_alt_names(certificate) {
+        let subject_alternative_name = subject_alternative_name.build(&cert_builder.x509v3_context(Some(&ca.cert), None))?;
+        cert_builder.append_extension(subject_alternative_name)?;
+    }
 
     let authority_key_identifier = AuthorityKeyIdentifier::new()
         .keyid(false)
