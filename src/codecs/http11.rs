@@ -26,8 +26,8 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR Other
 DEALINGS IN THE SOFTWARE. */
 
 // Code borrowed from https://github.com/tokio-rs/tokio/blob/master/examples/tinyhttp.rs
-use std::{fmt, io};
 use std::str::FromStr;
+use std::{fmt, io};
 
 use bytes::BytesMut;
 use http::{header::HeaderValue, Request, Response};
@@ -49,7 +49,8 @@ impl Encoder for HttpServer {
             item.method(),
             item.uri(),
             item.version(),
-        ).unwrap();
+        )
+        .unwrap();
 
         for (k, v) in item.headers() {
             dst.extend_from_slice(k.as_str().as_bytes());
@@ -80,7 +81,6 @@ impl Encoder for HttpServer {
         }
     }
 }
-
 
 impl Decoder for HttpServer {
     type Item = Response<Vec<u8>>;
@@ -117,14 +117,21 @@ impl Decoder for HttpServer {
                     assert!(header.value == b"chunked");
                     body_parser = BodyParser::Chunked;
                 } else if header.name.to_lowercase() == "content-length" {
-                    body_parser = BodyParser::ContentLength(String::from_utf8(header.value.to_vec()).unwrap().parse().unwrap())
+                    body_parser = BodyParser::ContentLength(
+                        String::from_utf8(header.value.to_vec())
+                            .unwrap()
+                            .parse()
+                            .unwrap(),
+                    )
                 }
                 let k = toslice(header.name.as_bytes());
                 let v = toslice(header.value);
                 headers[i] = Some((k, v));
             }
 
-            if !body_parser.is_complete(&src[amt..]) { return Ok(None); }
+            if !body_parser.is_complete(&src[amt..]) {
+                return Ok(None);
+            }
 
             (
                 r.code.unwrap(),
@@ -137,13 +144,15 @@ impl Decoder for HttpServer {
         if version != 1 {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
-                format!("only HTTP/1.1 accepted but received {}", String::from_utf8(src.to_vec()).unwrap()),
+                format!(
+                    "only HTTP/1.1 accepted but received {}",
+                    String::from_utf8(src.to_vec()).unwrap()
+                ),
             ));
         }
         let pre_body = src.split_to(amt).freeze();
         let mut ret = Response::builder();
         ret.status(status);
-        //TODO: it seems that http crate doesn't let you set the reason-phrase. why and is this an issue?
         ret.version(http::Version::HTTP_11);
         for header in headers.iter() {
             let (k, v) = match *header {
@@ -154,11 +163,12 @@ impl Decoder for HttpServer {
             ret.header(&pre_body[k.0..k.1], value);
         }
 
-        let response = ret.body(src.to_vec()).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let response = ret
+            .body(src.to_vec())
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         Ok(Some(response))
     }
 }
-
 
 pub struct HttpClient;
 
@@ -175,7 +185,8 @@ impl Encoder for HttpClient {
             "{:?} {}\r\n",
             item.version(),
             item.status(),
-        ).unwrap();
+        )
+        .unwrap();
 
         for (k, v) in item.headers() {
             dst.extend_from_slice(k.as_str().as_bytes());
@@ -242,14 +253,21 @@ impl Decoder for HttpClient {
                     assert!(header.value == b"chunked");
                     body_parser = BodyParser::Chunked;
                 } else if header.name.to_lowercase() == "content-length" {
-                    body_parser = BodyParser::ContentLength(String::from_utf8(header.value.to_vec()).unwrap().parse().unwrap())
+                    body_parser = BodyParser::ContentLength(
+                        String::from_utf8(header.value.to_vec())
+                            .unwrap()
+                            .parse()
+                            .unwrap(),
+                    )
                 }
                 let k = toslice(header.name.as_bytes());
                 let v = toslice(header.value);
                 headers[i] = Some((k, v));
             }
 
-            if !body_parser.is_complete(&src[amt..]) { return Ok(None); }
+            if !body_parser.is_complete(&src[amt..]) {
+                return Ok(None);
+            }
             (
                 toslice(r.method.unwrap().as_bytes()),
                 toslice(r.path.unwrap().as_bytes()),
@@ -266,8 +284,9 @@ impl Decoder for HttpClient {
         let pre_body = src.split_to(amt).freeze();
         let mut ret = Request::builder();
         ret.method(&pre_body[method.0..method.1]);
-        let uri = http::Uri::from_str(&String::from_utf8(pre_body.slice(path.0, path.1).to_vec()).unwrap());
-        //TODO: remove this weirdness and move it up to client code
+        let uri = http::Uri::from_str(
+            &String::from_utf8(pre_body.slice(path.0, path.1).to_vec()).unwrap(),
+        );
         if ret.method_ref().unwrap() == http::Method::CONNECT {
             ret.uri(uri.unwrap());
         } else {
@@ -282,8 +301,9 @@ impl Decoder for HttpClient {
             //TODO: do we really need unsafe code here?!
             let value = unsafe { HeaderValue::from_shared_unchecked(pre_body.slice(v.0, v.1)) };
             let header_name = String::from_utf8(pre_body[k.0..k.1].to_vec()).unwrap();
-            //TODO: remove this weirdness and move it up to client code
-            if header_name.to_lowercase() == "proxy-connection" { continue; }
+            if header_name.to_lowercase() == "proxy-connection" {
+                continue;
+            }
             ret.header(&pre_body[k.0..k.1], value);
         }
 
@@ -309,7 +329,8 @@ mod response_encoding_test {
             .version(http::Version::HTTP_11)
             .status(http::StatusCode::OK)
             .header("transfer-encoding", "chunked")
-            .body(b"1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n".to_vec()).unwrap();
+            .body(b"1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n".to_vec())
+            .unwrap();
 
         let response = server.decode(&mut buf).unwrap().unwrap();
 
@@ -324,7 +345,8 @@ mod response_encoding_test {
             .version(http::Version::HTTP_11)
             .status(http::StatusCode::OK)
             .header("transfer-encoding", "chunked")
-            .body(b"1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n".to_vec()).unwrap();
+            .body(b"1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n".to_vec())
+            .unwrap();
         let mut dst: BytesMut = BytesMut::with_capacity(1000);
 
         client.encode(response, &mut dst).unwrap();
@@ -378,7 +400,6 @@ mod response_encoding_test {
             .header("Alt-Svc", "quic=\":443\"; ma=2592000; v=\"46,43\",h3-Q050=\":443\"; ma=2592000,h3-Q049=\":443\"; ma=2592000,h3-Q048=\":443\"; ma=2592000,h3-Q046=\":443\"; ma=2592000,h3-Q043=\":443\"; ma=2592000")
             .body(b"<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\n<TITLE>301 Moved</TITLE></HEAD><BODY>\n<H1>301 Moved</H1>\nThe document has moved\n<A HREF=\"https://www.google.com/\">here</A>.\r\n</BODY></HTML>\r\n".to_vec()).unwrap();
 
-
         let response = server.decode(&mut buf).unwrap().unwrap();
 
         assert_response_equal(expected, response);
@@ -415,10 +436,19 @@ mod response_encoding_test {
         assert_eq!(expected.body(), actual.body());
         assert_eq!(expected.status(), actual.status());
         for (k, v) in actual.headers().iter() {
-            assert_eq!(expected.headers().get(k).expect("Header missing from expected"), v);
+            assert_eq!(
+                expected
+                    .headers()
+                    .get(k)
+                    .expect("Header missing from expected"),
+                v
+            );
         }
         for (k, v) in expected.headers().iter() {
-            assert_eq!(actual.headers().get(k).expect("Header missing from actual"), v);
+            assert_eq!(
+                actual.headers().get(k).expect("Header missing from actual"),
+                v
+            );
         }
     }
 }
@@ -436,7 +466,8 @@ mod request_encoding_test {
             .version(http::Version::HTTP_11)
             .uri("/")
             .header("Host", "google.com")
-            .body(b"".to_vec()).unwrap();
+            .body(b"".to_vec())
+            .unwrap();
         let expected_bytes = b"GET / HTTP/1.1\r\nhost: google.com\r\n\r\n";
         let mut dst = BytesMut::with_capacity(1000);
 
@@ -456,10 +487,10 @@ mod request_encoding_test {
             .version(http::Version::HTTP_11)
             .uri("/")
             .header("Host", "google.com")
-            .body(b"".to_vec()).unwrap();
+            .body(b"".to_vec())
+            .unwrap();
 
-        let request = client.decode(&mut buf)
-            .unwrap().unwrap();
+        let request = client.decode(&mut buf).unwrap().unwrap();
 
         assert_request_equal(expected, request);
     }
@@ -472,7 +503,8 @@ mod request_encoding_test {
             .version(http::Version::HTTP_11)
             .uri("/")
             .header("Transfer-encoding", "chunked")
-            .body(b"1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n".to_vec()).unwrap();
+            .body(b"1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n".to_vec())
+            .unwrap();
         let expected_bytes = b"POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n";
         let mut dst = BytesMut::with_capacity(1000);
 
@@ -492,7 +524,8 @@ mod request_encoding_test {
             .version(http::Version::HTTP_11)
             .uri("/")
             .header("Transfer-encoding", "chunked")
-            .body(b"1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n".to_vec()).unwrap();
+            .body(b"1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n".to_vec())
+            .unwrap();
 
         let request = client.decode(&mut buf).unwrap().unwrap();
 
@@ -523,10 +556,10 @@ mod request_encoding_test {
             .version(http::Version::HTTP_11)
             .uri("/")
             .header("Content-length", "10")
-            .body(b"abcdefgh\r\n".to_vec()).unwrap();
+            .body(b"abcdefgh\r\n".to_vec())
+            .unwrap();
 
-        let request = client.decode(&mut buf)
-            .unwrap().unwrap();
+        let request = client.decode(&mut buf).unwrap().unwrap();
 
         assert_request_equal(expected, request);
     }
@@ -539,7 +572,8 @@ mod request_encoding_test {
             .version(http::Version::HTTP_11)
             .uri("/")
             .header("Content-length", "10")
-            .body(b"abcdefghij".to_vec()).unwrap();
+            .body(b"abcdefghij".to_vec())
+            .unwrap();
         let expected_bytes = b"POST / HTTP/1.1\r\ncontent-length: 10\r\n\r\nabcdefghij";
         let mut dst: BytesMut = BytesMut::with_capacity(1000);
 
@@ -580,10 +614,19 @@ mod request_encoding_test {
         assert_eq!(expected.method(), actual.method());
         assert_eq!(expected.body(), actual.body());
         for (k, v) in actual.headers().iter() {
-            assert_eq!(expected.headers().get(k).expect("Header missing from expected"), v);
+            assert_eq!(
+                expected
+                    .headers()
+                    .get(k)
+                    .expect("Header missing from expected"),
+                v
+            );
         }
         for (k, v) in expected.headers().iter() {
-            assert_eq!(actual.headers().get(k).expect("Header missing from actual"), v);
+            assert_eq!(
+                actual.headers().get(k).expect("Header missing from actual"),
+                v
+            );
         }
     }
 }

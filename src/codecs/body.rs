@@ -36,10 +36,10 @@ impl BodyParser {
                     };
                 }
             }
-            &Self::ContentLength(expected_length) => {
-                bytes.len() == expected_length
+            &Self::ContentLength(expected_length) => bytes.len() == expected_length,
+            &Self::Empty => {
+                return true;
             }
-            &Self::Empty => { return true; }
         }
     }
 }
