@@ -287,11 +287,7 @@ impl Decoder for HttpClient {
         let uri = http::Uri::from_str(
             &String::from_utf8(pre_body.slice(path.0, path.1).to_vec()).unwrap(),
         );
-        if ret.method_ref().unwrap() == http::Method::CONNECT {
-            ret.uri(uri.unwrap());
-        } else {
-            ret.uri(uri.unwrap().path());
-        }
+        ret.uri(uri.unwrap());
         ret.version(http::Version::HTTP_11);
         for header in headers.iter() {
             let (k, v) = match *header {
@@ -300,10 +296,6 @@ impl Decoder for HttpClient {
             };
             //TODO: do we really need unsafe code here?!
             let value = unsafe { HeaderValue::from_shared_unchecked(pre_body.slice(v.0, v.1)) };
-            let header_name = String::from_utf8(pre_body[k.0..k.1].to_vec()).unwrap();
-            if header_name.to_lowercase() == "proxy-connection" {
-                continue;
-            }
             ret.header(&pre_body[k.0..k.1], value);
         }
 

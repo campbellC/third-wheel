@@ -9,22 +9,10 @@ use http_proxy::{run_http_proxy, start_mitm};
 
 mod codecs;
 
-use codecs::http11::{HttpClient, HttpServer};
-
 use std::fs::File;
 use std::io::Write;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
-use futures_util::{SinkExt, StreamExt};
-use native_tls::TlsConnector;
-use openssl::pkcs12::Pkcs12;
-use openssl::pkey::PKey;
-use openssl::rsa::Rsa;
-use std::net::SocketAddr;
-use tokio::codec::Framed;
-use tokio::net::TcpListener;
-use tokio::net::TcpStream;
-use tokio_tls::TlsAcceptor;
 #[macro_use]
 extern crate lazy_static;
 

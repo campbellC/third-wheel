@@ -11,6 +11,7 @@ use tokio_tls::{TlsAcceptor, TlsStream};
 use crate::certificates::{load_key_from_file, native_identity, spoof_certificate, CA};
 use crate::codecs::http11::{HttpClient, HttpServer};
 use crate::SafeResult;
+use http::header::HeaderName;
 
 lazy_static! {
     static ref CERT_AUTH: crate::certificates::CA =
@@ -74,13 +75,17 @@ async fn tls_mitm(
     let certificate = spoof_certificate(&server_certificate, cert_auth).unwrap();
     let identity = native_identity(&certificate, private_key);
     let mut client_stream = convert_to_tls(client_stream, identity).await;
-
-    //Now the mitm is set up, the client believes its talking to host directly.
+    let proxy_connection: HeaderName =
+        HeaderName::from_lowercase("proxy-connection".as_bytes()).unwrap();
 
     while let Some(request) = client_stream.next().await {
         dbg!(&request);
-        target_stream.send(request.unwrap()).await?;
-        //TODO: handle partial content 206 responses (or other streamed content?)
+        let mut request = request.unwrap();
+        *request.uri_mut() = request.uri().path().parse().unwrap();
+        request.headers_mut().remove(&proxy_connection);
+
+        target_stream.send(request).await?;
+
         let response = target_stream.next().await.unwrap()?;
         dbg!(&response);
         client_stream.send(response).await.unwrap();
