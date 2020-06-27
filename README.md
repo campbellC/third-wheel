@@ -27,7 +27,7 @@ The `test_against_chrome.sh` script uses Docker, Chromium and Selenium to test t
 * ~~Transparent HTTP Proxy~~
 * Transparent HTTPS Proxy
 * ~~MITM Proxy trusted by standard curl~~
-* MITM Proxy trusted by Chrome
+* ~~MITM Proxy trusted by Chrome~~
 * MITM Proxy trusted by Firefox
 * MITM Proxy mode is faster/slimmer in memory than [mitmproxy](https://github.com/mitmproxy/mitmproxy)
 * Library version for extension by other developers

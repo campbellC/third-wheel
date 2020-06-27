@@ -79,7 +79,6 @@ async fn tls_mitm(
         HeaderName::from_lowercase("proxy-connection".as_bytes()).unwrap();
 
     while let Some(request) = client_stream.next().await {
-        dbg!(&request);
         let mut request = request.unwrap();
         *request.uri_mut() = request.uri().path().parse().unwrap();
         request.headers_mut().remove(&proxy_connection);
@@ -87,7 +86,6 @@ async fn tls_mitm(
         target_stream.send(request).await?;
 
         let response = target_stream.next().await.unwrap()?;
-        dbg!(&response);
         client_stream.send(response).await.unwrap();
     }
 
@@ -124,7 +122,7 @@ async fn connect_to_target(
     host: &str,
     port: &str,
 ) -> (Framed<TlsStream<TcpStream>, HttpServer>, X509) {
-    //This format! *cannot* be inlined due to a compiler issue
+    // This format! *cannot* be inlined due to a compiler issue
     // https://github.com/rust-lang/rust/issues/64477
     let target_address = format!("{}:{}", host, port);
     let target_stream = TcpStream::connect(target_address).await.unwrap();
