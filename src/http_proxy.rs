@@ -76,7 +76,7 @@ async fn tls_mitm(
     let identity = native_identity(&certificate, private_key);
     let mut client_stream = convert_to_tls(client_stream, identity).await;
     let proxy_connection: HeaderName =
-        HeaderName::from_lowercase("proxy-connection".as_bytes()).unwrap();
+        HeaderName::from_lowercase(b"proxy-connection").unwrap();
 
     while let Some(request) = client_stream.next().await {
         let mut request = request.unwrap();
@@ -107,14 +107,13 @@ fn target_host_port(request: &Request<Vec<u8>>) -> (String, String) {
         request
             .headers()
             .iter()
-            .filter(|x| x.0 == "Host")
-            .next()
+            .find(|x| x.0 == "Host")
             .unwrap()
             .1
             .as_bytes(),
     ))
     .unwrap();
-    let pieces = host_header.split(":").collect::<Vec<&str>>();
+    let pieces = host_header.split(':').collect::<Vec<&str>>();
     (pieces[0].to_string(), pieces[1].to_string())
 }
 
@@ -160,8 +159,7 @@ pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>>
                             request
                                 .headers()
                                 .iter()
-                                .filter(|x| x.0 == "Host")
-                                .next()
+                                .find(|x| x.0 == "Host")
                                 .unwrap()
                                 .1
                                 .as_bytes(),

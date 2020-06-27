@@ -13,8 +13,8 @@ pub(super) enum BodyParser {
 
 impl BodyParser {
     pub(super) fn is_complete(&self, bytes: &[u8]) -> bool {
-        match self {
-            &Self::Chunked => {
+        match *self {
+            Self::Chunked => {
                 let mut current: usize = 0;
                 loop {
                     match parse_chunk_size(&bytes[current..]) {
@@ -36,9 +36,9 @@ impl BodyParser {
                     };
                 }
             }
-            &Self::ContentLength(expected_length) => bytes.len() == expected_length,
-            &Self::Empty => {
-                return true;
+            Self::ContentLength(expected_length) => bytes.len() == expected_length,
+            Self::Empty => {
+                true
             }
         }
     }
