@@ -7,8 +7,9 @@ use openssl::hash::MessageDigest;
 use openssl::pkcs12::Pkcs12;
 use openssl::pkey::{PKey, Private};
 use openssl::rsa::Rsa;
+use openssl::stack::Stack;
 use openssl::x509::extension::{AuthorityKeyIdentifier, SubjectAlternativeName};
-use openssl::x509::{X509Name, X509NameRef, X509};
+use openssl::x509::{GeneralNameRef, X509Name, X509NameRef, X509};
 
 pub struct CA {
     pub(self) cert: X509,
@@ -149,7 +150,7 @@ pub(crate) fn spoof_certificate(
 
     cert_builder.set_serial_number(certificate.serial_number())?;
 
-    cert_builder.set_version(3)?;
+    cert_builder.set_version(2)?;
 
     if let Some(subject_alternative_name) = copy_alt_names(certificate) {
         let subject_alternative_name =
@@ -157,9 +158,12 @@ pub(crate) fn spoof_certificate(
         cert_builder.append_extension(subject_alternative_name)?;
     }
 
+    // TODO: understand why these should be true or false
+    // it seems from the RFC for OCSP that these should be true but this needs looking into properly
+    // https://tools.ietf.org/html/rfc2560
     let authority_key_identifier = AuthorityKeyIdentifier::new()
-        .keyid(false)
-        .issuer(false)
+        .keyid(true)
+        .issuer(true)
         .build(&cert_builder.x509v3_context(Some(&ca.cert), None))?;
     cert_builder.append_extension(authority_key_identifier)?;
 
@@ -168,4 +172,92 @@ pub(crate) fn spoof_certificate(
     cert_builder.sign(&ca.key, MessageDigest::sha256())?;
 
     Ok(cert_builder.build())
+}
+
+#[allow(dead_code)]
+fn print_certificate(certificate: &X509) {
+    println!("New certificate");
+
+    println!("subject_name:");
+    for entry in certificate.subject_name().entries() {
+        println!("{}: {}", entry.object(), entry.data().as_utf8().unwrap());
+    }
+    println!();
+    println!("issuer_name:");
+    for entry in certificate.issuer_name().entries() {
+        println!("{}: {}", entry.object(), entry.data().as_utf8().unwrap());
+    }
+    println!();
+
+    println!("subject_alt_names");
+    for general_name in certificate
+        .subject_alt_names()
+        .unwrap_or_else(|| Stack::new().unwrap())
+        .iter()
+    {
+        print_general_name(general_name);
+    }
+    println!();
+
+    println!("issuer_alt_names");
+    for general_name in certificate
+        .issuer_alt_names()
+        .unwrap_or_else(|| Stack::new().unwrap())
+        .iter()
+    {
+        print_general_name(general_name);
+    }
+    println!();
+
+    println!("public_key: {:?}", certificate.public_key());
+    println!();
+
+    println!("not_after: {}", certificate.not_after());
+    println!("not_before: {}", certificate.not_before());
+    println!();
+
+    println!("Signature: ");
+    println!("{:x?}", certificate.signature().as_slice());
+    println!();
+
+    println!(
+        "Signature algorithm: {}",
+        certificate.signature_algorithm().object()
+    );
+    println!();
+
+    println!("ocsp_responders:");
+    let responders = certificate.ocsp_responders();
+    match responders {
+        Ok(stack) => {
+            for responder in stack.iter() {
+                println!("{:?}", responder);
+            }
+        }
+        Err(err) => println!("Responders threw error: {}", err),
+    }
+
+    let serial_number = certificate.serial_number().to_bn();
+    match serial_number {
+        Ok(sn) => println!("{}", sn),
+        Err(err) => println!("Responders threw error: {}", err),
+    }
+    println!();
+
+    println!();
+}
+
+fn print_general_name(general_name: &GeneralNameRef) {
+    if let Some(email) = general_name.email() {
+        println!("email: {}", email);
+    }
+    if let Some(dnsname) = general_name.dnsname() {
+        println!("dnsname: {}", dnsname);
+    }
+    if let Some(uri) = general_name.uri() {
+        println!("uri: {}", uri);
+    }
+    if let Some(ipaddress) = general_name.ipaddress() {
+        println!("ipaddress: {:?}", ipaddress);
+    }
 }
