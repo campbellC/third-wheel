@@ -20,14 +20,14 @@ from the third-wheel directory. You'll need to have run `set_up_and_validate_env
 #### Development
 If you want to develop/use third-wheel while still in early stages you will need to generate the certificate authority certificates and check your local version of curl and openssl are working as expected. Run the `set_up_and_validate_environment.sh` script to do this.
 
-#### Testing against Chrome
-The `test_against_chrome.sh` script uses Docker, Chromium and Selenium to test that Chromium is tricked by the mitm. It does most of the setup for you but you do need docker installed for it to work. It uses sudo to run docker because it doesn't assume you've modified the docker group - if you have done so feel free to delete the sudo's and then feel more confident running the script :)
+#### Testing against Chrome and Firefox
+The `test_against_chrome.sh` and `test_against_firefox.sh` scripts uses Docker, (Chromium|Firefox) and Selenium to test that the browsers are tricked by the mitm. It does most of the setup for you but you do need docker installed for it to work. It uses sudo to run docker because it doesn't assume you've modified the docker group - if you have done so feel free to delete the sudo's and then feel more confident running the script :)
 
 #### Planned Features
 * ~~Transparent HTTP Proxy~~
 * Transparent HTTPS Proxy
 * ~~MITM Proxy trusted by standard curl~~
 * ~~MITM Proxy trusted by Chrome~~
-* MITM Proxy trusted by Firefox
+* ~~MITM Proxy trusted by Firefox~~
 * MITM Proxy mode is faster/slimmer in memory than [mitmproxy](https://github.com/mitmproxy/mitmproxy)
 * Library version for extension by other developers

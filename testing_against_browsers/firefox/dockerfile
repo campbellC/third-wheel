@@ -1,0 +1,23 @@
+FROM ubuntu:18.04 as firefox_image
+
+USER root
+# Install Chromium and ChromeDriver
+RUN apt-get update && \
+    apt-get install -y software-properties-common firefox firefox-geckodriver
+
+# Install Selenium
+RUN apt-get install -y python3-venv && \
+    python3 -m venv create /tmp/python_env && \
+    /bin/bash -c "source /tmp/python_env/bin/activate; pip3 install selenium"
+
+FROM firefox_image as cert_image
+COPY ./ca_certs/cert.pem /tmp/mitm.crt
+RUN apt-get install -y libnss3-tools &&\
+  mkdir -p $HOME/.mozilla/firefox/my_profile.default &&\
+  certutil -d $HOME/.mozilla/firefox/my_profile.default -N --empty-password
+RUN certutil -d sql:$HOME/.mozilla/firefox/my_profile.default  -A -n 'mitm cert authority' -i /tmp/mitm.crt -t "C,,"
+
+FROM cert_image
+RUN mkdir -p /tmp/test_files
+COPY test_against_firefox.py /tmp/test_files
+CMD /bin/bash -c "source /tmp/python_env/bin/activate; python3 /tmp/test_files/test_against_firefox.py"
