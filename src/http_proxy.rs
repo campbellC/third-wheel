@@ -75,8 +75,7 @@ async fn tls_mitm(
     let certificate = spoof_certificate(&server_certificate, cert_auth).unwrap();
     let identity = native_identity(&certificate, private_key);
     let mut client_stream = convert_to_tls(client_stream, identity).await;
-    let proxy_connection: HeaderName =
-        HeaderName::from_lowercase(b"proxy-connection").unwrap();
+    let proxy_connection: HeaderName = HeaderName::from_lowercase(b"proxy-connection").unwrap();
 
     while let Some(request) = client_stream.next().await {
         let mut request = request.unwrap();

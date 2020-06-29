@@ -1,22 +1,9 @@
-mod certificates;
-
-use crate::certificates::create_signed_certificate_for_domain;
-use crate::certificates::CA;
-
-mod http_proxy;
-
-use http_proxy::{run_http_proxy, start_mitm};
-
-mod codecs;
-
 use std::fs::File;
 use std::io::Write;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
-#[macro_use]
-extern crate lazy_static;
 
-type SafeResult = Result<(), Box<dyn std::error::Error>>;
+use third_wheel::*;
 
 #[tokio::main]
 async fn main() -> SafeResult {

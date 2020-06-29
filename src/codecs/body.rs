@@ -37,9 +37,7 @@ impl BodyParser {
                 }
             }
             Self::ContentLength(expected_length) => bytes.len() == expected_length,
-            Self::Empty => {
-                true
-            }
+            Self::Empty => true,
         }
     }
 }
