@@ -25,15 +25,13 @@ lazy_static! {
     static ref KEY: PKey<Private> = load_key_from_file("ca/ca_certs/key.pem").unwrap();
 }
 
-pub async fn start_mitm<T,S>(
+pub async fn start_mitm<T>(
     port: u16,
-    mitm: Arc<MitmLayer<T,S>>,
+    mitm: Arc<T>,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    T: Fn(&Request<Vec<u8>>) -> RequestCapture + std::marker::Sync + std::marker::Send,
+    T: MitmLayer + std::marker::Sync + std::marker::Send,
     T: 'static,
-    S: Fn(&Request<Vec<u8>>, &Response<Vec<u8>>) -> ResponseCapture + std::marker::Sync + std::marker::Send,
-    S: 'static,
 {
     let addr = format!("127.0.0.1:{}", port);
     println!("mitm proxy listening on {}", addr);
@@ -64,29 +62,27 @@ where
     }
 }
 
-async fn tls_mitm_wrapper<T,S>(
+async fn tls_mitm_wrapper<T>(
     client_stream: Framed<TcpStream, HttpClient>,
     opening_request: Request<Vec<u8>>,
-    mitm: Arc<MitmLayer<T,S>>,
+    mitm: Arc<T>,
 ) where
-    T: Fn(&Request<Vec<u8>>) -> RequestCapture + std::marker::Sync,
-    S: Fn(&Request<Vec<u8>>, &Response<Vec<u8>>) -> ResponseCapture + std::marker::Sync,
+    T: MitmLayer,
 {
     tls_mitm(client_stream, opening_request, &CERT_AUTH, &KEY, mitm)
         .await
         .unwrap();
 }
 
-async fn tls_mitm<T,S>(
+async fn tls_mitm<T>(
     mut client_stream: Framed<TcpStream, HttpClient>,
     opening_request: Request<Vec<u8>>,
     cert_auth: &CA,
     private_key: &PKey<Private>,
-    mitm: Arc<MitmLayer<T,S>>,
+    mitm: Arc<T>,
 ) -> SafeResult
 where
-    T: Fn(&Request<Vec<u8>>) -> RequestCapture + std::marker::Sync,
-    S: Fn(&Request<Vec<u8>>, &Response<Vec<u8>>) -> ResponseCapture + std::marker::Sync,
+    T: MitmLayer
 {
     let (host, port) = target_host_port(&opening_request);
     let (mut target_stream, server_certificate) = connect_to_target(&host, &port).await;
@@ -107,7 +103,7 @@ where
 
     while let Some(request) = client_stream.next().await {
         let mut request = request.unwrap();
-        match (mitm.request_capturer)(&request) {
+        match mitm.capture_request(&request) {
             RequestCapture::CircumventedResponse(response) => {
                 client_stream.send(&response).await.unwrap();
                 continue;
@@ -121,7 +117,7 @@ where
         target_stream.send(&request).await?;
 
         let mut response = target_stream.next().await.unwrap()?;
-        match (mitm.response_capturer)(&request, &response) {
+        match mitm.capture_response(&request, &response) {
             ResponseCapture::ModifiedResponse(new_response) => {
                 response = new_response;
             }

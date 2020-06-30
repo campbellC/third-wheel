@@ -11,21 +11,7 @@ pub enum ResponseCapture {
     Continue,
 }
 
-pub struct MitmLayer<T, S>
-where
-    T: Fn(&Request<Vec<u8>>) -> RequestCapture,
-    S: Fn(&Request<Vec<u8>>, &Response<Vec<u8>>) -> ResponseCapture,
-{
-    pub request_capturer: T,
-    pub response_capturer: S,
-}
-
-impl<T, S> MitmLayer<T, S>
-where
-    T: Fn(&Request<Vec<u8>>) -> RequestCapture,
-    S: Fn(&Request<Vec<u8>>, &Response<Vec<u8>>) -> ResponseCapture,
-{
-    pub fn new(request_capturer: T, response_capturer: S) -> Self {
-        Self { request_capturer, response_capturer }
-    }
+pub trait MitmLayer {
+    fn capture_request(&self, request: &Request<Vec<u8>>) -> RequestCapture;
+    fn capture_response(&self, request: &Request<Vec<u8>>, response: &Response<Vec<u8>>) -> ResponseCapture;
 }
