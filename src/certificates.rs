@@ -35,9 +35,7 @@ impl CA {
     }
 }
 
-pub(crate) fn load_key_from_file(
-    key_file: &str,
-) -> Result<PKey<Private>, Box<dyn std::error::Error>> {
+pub fn load_key_from_file(key_file: &str) -> Result<PKey<Private>, Box<dyn std::error::Error>> {
     let mut key_file = File::open(key_file)?;
     let mut key: Vec<u8> = vec![];
     io::copy(&mut key_file, &mut key)?;
@@ -54,7 +52,7 @@ pub(crate) fn native_identity(certificate: &X509, key: &PKey<Private>) -> native
     native_tls::Identity::from_pkcs12(&pkcs, &"").unwrap()
 }
 
-pub(crate) fn create_signed_certificate_for_domain(
+pub fn create_signed_certificate_for_domain(
     domain: &str,
     ca: &CA,
 ) -> Result<X509, Box<dyn std::error::Error>> {

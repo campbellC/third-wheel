@@ -30,4 +30,4 @@ The `test_against_chrome.sh` and `test_against_firefox.sh` scripts uses Docker, 
 * ~~MITM Proxy trusted by Chrome~~
 * ~~MITM Proxy trusted by Firefox~~
 * MITM Proxy mode is faster/slimmer in memory than [mitmproxy](https://github.com/mitmproxy/mitmproxy)
-* Library version for extension by other developers
+* ~~Library version for extension by other developers~~
