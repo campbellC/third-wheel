@@ -31,17 +31,16 @@ use std::{fmt, io};
 
 use bytes::BytesMut;
 use http::{header::HeaderValue, Request, Response};
-use tokio::codec::{Decoder, Encoder};
+use tokio_util::codec::{Decoder, Encoder};
 
 use super::body::BodyParser;
 
 pub struct HttpServer;
 
-impl Encoder for HttpServer {
-    type Item = Request<Vec<u8>>;
+impl Encoder<&Request<Vec<u8>>> for HttpServer {
     type Error = io::Error;
 
-    fn encode(&mut self, item: Request<Vec<u8>>, dst: &mut BytesMut) -> io::Result<()> {
+    fn encode(&mut self, item: &Request<Vec<u8>>, dst: &mut BytesMut) -> io::Result<()> {
         use std::fmt::Write;
         write!(
             BytesWrite(dst),
@@ -86,7 +85,7 @@ impl Decoder for HttpServer {
     type Item = Response<Vec<u8>>;
     type Error = io::Error;
 
-    fn decode(&mut self, src: &mut BytesMut) -> io::Result<Option<Response<Vec<u8>>>> {
+    fn decode(&mut self, src: &mut BytesMut) -> io::Result<Option<Self::Item>> {
         // TODO: we should grow this headers array if parsing fails and asks
         //       for more headers
         let mut headers = [None; 16];
@@ -152,15 +151,15 @@ impl Decoder for HttpServer {
         }
         let pre_body = src.split_to(amt).freeze();
         let mut ret = Response::builder();
-        ret.status(status);
-        ret.version(http::Version::HTTP_11);
+        ret = ret.status(status);
+        ret = ret.version(http::Version::HTTP_11);
         for header in headers.iter() {
             let (k, v) = match *header {
                 Some((ref k, ref v)) => (k, v),
                 None => break,
             };
-            let value = unsafe { HeaderValue::from_shared_unchecked(pre_body.slice(v.0, v.1)) };
-            ret.header(&pre_body[k.0..k.1], value);
+            let value = unsafe { HeaderValue::from_maybe_shared_unchecked(pre_body.slice(v.0..v.1)) };
+            ret = ret.header(&pre_body[k.0..k.1], value);
         }
 
         let response = ret
@@ -173,11 +172,10 @@ impl Decoder for HttpServer {
 pub struct HttpClient;
 
 //TODO: modify this for different versions of HTTP1?
-impl Encoder for HttpClient {
-    type Item = Response<Vec<u8>>;
+impl Encoder<&Response<Vec<u8>>> for HttpClient {
     type Error = io::Error;
 
-    fn encode(&mut self, item: Response<Vec<u8>>, dst: &mut BytesMut) -> io::Result<()> {
+    fn encode(&mut self, item: &Response<Vec<u8>>, dst: &mut BytesMut) -> io::Result<()> {
         use std::fmt::Write;
 
         write!(
@@ -283,20 +281,20 @@ impl Decoder for HttpClient {
         }
         let pre_body = src.split_to(amt).freeze();
         let mut ret = Request::builder();
-        ret.method(&pre_body[method.0..method.1]);
+        ret = ret.method(&pre_body[method.0..method.1]);
         let uri = http::Uri::from_str(
-            &String::from_utf8(pre_body.slice(path.0, path.1).to_vec()).unwrap(),
+            &String::from_utf8(pre_body.slice(path.0..path.1).to_vec()).unwrap(),
         );
-        ret.uri(uri.unwrap());
-        ret.version(http::Version::HTTP_11);
+        ret = ret.uri(uri.unwrap());
+        ret = ret.version(http::Version::HTTP_11);
         for header in headers.iter() {
             let (k, v) = match *header {
                 Some((ref k, ref v)) => (k, v),
                 None => break,
             };
             //TODO: do we really need unsafe code here?!
-            let value = unsafe { HeaderValue::from_shared_unchecked(pre_body.slice(v.0, v.1)) };
-            ret.header(&pre_body[k.0..k.1], value);
+            let value = unsafe { HeaderValue::from_maybe_shared_unchecked(pre_body.slice(v.0..v.1)) };
+            ret = ret.header(&pre_body[k.0..k.1], value);
         }
 
         let req = ret

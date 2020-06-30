@@ -1,16 +1,22 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
+use futures::sink::SinkExt;
 
 use http::{Request, Response};
 use openssl::pkey::{PKey, Private};
 use openssl::x509::X509;
-use tokio::codec::Framed;
+use tokio_util::codec::Framed;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::prelude::*;
-use tokio_tls::{TlsAcceptor, TlsStream};
+use tokio_native_tls::{TlsAcceptor, TlsStream};
+use tokio::stream::StreamExt;
 
 use crate::certificates::{load_key_from_file, native_identity, spoof_certificate, CA};
 use crate::codecs::http11::{HttpClient, HttpServer};
 use crate::SafeResult;
+
+pub mod mitm;
+pub use self::mitm::{MitmLayer, RequestCapture, ResponseCapture};
+
 use http::header::HeaderName;
 
 lazy_static! {
@@ -19,7 +25,16 @@ lazy_static! {
     static ref KEY: PKey<Private> = load_key_from_file("ca/ca_certs/key.pem").unwrap();
 }
 
-pub async fn start_mitm(port: u16) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_mitm<T,S>(
+    port: u16,
+    mitm: Arc<MitmLayer<T,S>>,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    T: Fn(&Request<Vec<u8>>) -> RequestCapture + std::marker::Sync + std::marker::Send,
+    T: 'static,
+    S: Fn(&Request<Vec<u8>>, &Response<Vec<u8>>) -> ResponseCapture + std::marker::Sync + std::marker::Send,
+    S: 'static,
+{
     let addr = format!("127.0.0.1:{}", port);
     println!("mitm proxy listening on {}", addr);
     let addr = addr.parse::<SocketAddr>()?;
@@ -32,7 +47,11 @@ pub async fn start_mitm(port: u16) -> Result<(), Box<dyn std::error::Error>> {
             match proxy_opening_request {
                 Ok(proxy_opening_request) => {
                     if proxy_opening_request.method() == http::Method::CONNECT {
-                        tokio::spawn(tls_mitm_wrapper(transport, proxy_opening_request));
+                        tokio::spawn(tls_mitm_wrapper(
+                            transport,
+                            proxy_opening_request,
+                            mitm.clone(),
+                        ));
                     }
                 }
                 Err(e) => {
@@ -45,26 +64,35 @@ pub async fn start_mitm(port: u16) -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-async fn tls_mitm_wrapper(
+async fn tls_mitm_wrapper<T,S>(
     client_stream: Framed<TcpStream, HttpClient>,
     opening_request: Request<Vec<u8>>,
-) {
-    tls_mitm(client_stream, opening_request, &CERT_AUTH, &KEY)
+    mitm: Arc<MitmLayer<T,S>>,
+) where
+    T: Fn(&Request<Vec<u8>>) -> RequestCapture + std::marker::Sync,
+    S: Fn(&Request<Vec<u8>>, &Response<Vec<u8>>) -> ResponseCapture + std::marker::Sync,
+{
+    tls_mitm(client_stream, opening_request, &CERT_AUTH, &KEY, mitm)
         .await
         .unwrap();
 }
 
-async fn tls_mitm(
+async fn tls_mitm<T,S>(
     mut client_stream: Framed<TcpStream, HttpClient>,
     opening_request: Request<Vec<u8>>,
     cert_auth: &CA,
     private_key: &PKey<Private>,
-) -> SafeResult {
+    mitm: Arc<MitmLayer<T,S>>,
+) -> SafeResult
+where
+    T: Fn(&Request<Vec<u8>>) -> RequestCapture + std::marker::Sync,
+    S: Fn(&Request<Vec<u8>>, &Response<Vec<u8>>) -> ResponseCapture + std::marker::Sync,
+{
     let (host, port) = target_host_port(&opening_request);
     let (mut target_stream, server_certificate) = connect_to_target(&host, &port).await;
     client_stream
         .send(
-            Response::builder()
+            &Response::builder()
                 .status(200)
                 .version(http::Version::HTTP_11)
                 .body(Vec::new())
@@ -79,13 +107,27 @@ async fn tls_mitm(
 
     while let Some(request) = client_stream.next().await {
         let mut request = request.unwrap();
+        match (mitm.request_capturer)(&request) {
+            RequestCapture::CircumventedResponse(response) => {
+                client_stream.send(&response).await.unwrap();
+                continue;
+            }
+            RequestCapture::ModifiedRequest(new_request) => request = new_request,
+            RequestCapture::Continue => {}
+        }
+
         *request.uri_mut() = request.uri().path().parse().unwrap();
         request.headers_mut().remove(&proxy_connection);
+        target_stream.send(&request).await?;
 
-        target_stream.send(request).await?;
-
-        let response = target_stream.next().await.unwrap()?;
-        client_stream.send(response).await.unwrap();
+        let mut response = target_stream.next().await.unwrap()?;
+        match (mitm.response_capturer)(&request, &response) {
+            ResponseCapture::ModifiedResponse(new_response) => {
+                response = new_response;
+            }
+            ResponseCapture::Continue => {}
+        }
+        client_stream.send(&response).await.unwrap();
     }
 
     Ok(())
@@ -125,11 +167,12 @@ async fn connect_to_target(
     let target_address = format!("{}:{}", host, port);
     let target_stream = TcpStream::connect(target_address).await.unwrap();
     let connector = native_tls::TlsConnector::builder().build().unwrap();
-    let tokio_connector = tokio_tls::TlsConnector::from(connector);
+    let tokio_connector = tokio_native_tls::TlsConnector::from(connector);
     let target_stream = tokio_connector.connect(&host, target_stream).await.unwrap();
     //TODO: investigate a more efficient way of building this - or maybe moving entirely up to native_tls
     let certificate = openssl::x509::X509::from_der(
         &target_stream
+            .get_ref()
             .peer_certificate()
             .unwrap()
             .unwrap()
@@ -169,13 +212,13 @@ pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>>
                         let target_address = format!("{}:80", host);
                         let target_stream = TcpStream::connect(target_address).await.unwrap();
                         let mut target_transport = Framed::new(target_stream, HttpServer);
-                        target_transport.send(request).await.unwrap();
+                        target_transport.send(&request).await.unwrap();
                         let response = target_transport
                             .next()
                             .await
                             .unwrap()
                             .expect("valid http response");
-                        transport.send(response).await.unwrap();
+                        transport.send(&response).await.unwrap();
                     }
                     Err(e) => {
                         dbg!(e);

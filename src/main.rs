@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::Write;
+use std::sync::Arc;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 
@@ -55,7 +56,13 @@ async fn main() -> SafeResult {
 async fn run(matches: ArgMatches<'_>) -> SafeResult {
     match matches.subcommand() {
         ("testing", Some(_m)) => testing_main().await,
-        ("mitm", Some(m)) => start_mitm(m.value_of("port").unwrap().parse().unwrap()).await,
+        ("mitm", Some(m)) => {
+            start_mitm(
+                m.value_of("port").unwrap().parse().unwrap(),
+                Arc::new(MitmLayer::new(|_| RequestCapture::Continue, |_,_| ResponseCapture::Continue))
+            )
+            .await
+        }
         ("http-proxy", Some(m)) => {
             run_http_proxy(m.value_of("port").unwrap().parse().unwrap()).await
         }
