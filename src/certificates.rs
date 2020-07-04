@@ -35,7 +35,7 @@ impl CA {
     }
 }
 
-pub fn load_key_from_file(key_file: &str) -> Result<PKey<Private>, Box<dyn std::error::Error>> {
+pub(crate) fn load_key_from_file(key_file: &str) -> Result<PKey<Private>, Box<dyn std::error::Error>> {
     let mut key_file = File::open(key_file)?;
     let mut key: Vec<u8> = vec![];
     io::copy(&mut key_file, &mut key)?;
