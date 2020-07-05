@@ -21,6 +21,8 @@ time = "0.1.42"
 native-tls = "^0.2"
 tokio-native-tls = "0.1.0"
 lazy_static = "1.4.0"
+log = "^0.4"
+async-trait = "^0.1"
 
 [dependencies.tokio]
 version = "0.2.21"

@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
+use async_trait::async_trait;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 use http::{Request, Response};
@@ -59,11 +60,12 @@ async fn run(matches: ArgMatches<'_>) -> SafeResult {
         ("testing", Some(_m)) => testing_main().await,
         ("mitm", Some(m)) => {
             struct EmptyCapturer;
+            #[async_trait]
             impl MitmLayer for EmptyCapturer {
-                fn capture_request(&self, _: &Request<Vec<u8>>) -> RequestCapture {
+                async fn capture_request(&self, _: &Request<Vec<u8>>) -> RequestCapture {
                     RequestCapture::Continue
                 }
-                fn capture_response(
+                async fn capture_response(
                     &self,
                     _: &Request<Vec<u8>>,
                     _: &Response<Vec<u8>>,

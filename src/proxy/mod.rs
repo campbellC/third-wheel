@@ -2,6 +2,8 @@ use futures::sink::SinkExt;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use log::{info, error};
+
 use http::{Request, Response};
 use openssl::pkey::{PKey, Private};
 use openssl::x509::X509;
@@ -30,7 +32,7 @@ where
     T: MitmLayer + std::marker::Sync + std::marker::Send + 'static,
 {
     let addr = format!("127.0.0.1:{}", port);
-    println!("mitm proxy listening on {}", addr);
+    info!("mitm proxy listening on {}", addr);
     let addr = addr.parse::<SocketAddr>()?;
     let mut new_client_listener = TcpListener::bind(&addr).await?;
 
@@ -49,7 +51,7 @@ where
                     }
                 }
                 Err(e) => {
-                    dbg!(e);
+                    error!("{}", e);
                 }
             }
         } else {
@@ -94,7 +96,7 @@ async fn tls_mitm(
 
     while let Some(request) = client_stream.next().await {
         let mut request = request.unwrap();
-        match mitm.capture_request(&request) {
+        match mitm.capture_request(&request).await {
             RequestCapture::CircumventedResponse(response) => {
                 client_stream.send(&response).await.unwrap();
                 continue;
@@ -108,7 +110,7 @@ async fn tls_mitm(
         target_stream.send(&request).await?;
 
         let mut response = target_stream.next().await.unwrap()?;
-        match mitm.capture_response(&request, &response) {
+        match mitm.capture_response(&request, &response).await {
             ResponseCapture::ModifiedResponse(new_response) => {
                 response = new_response;
             }
@@ -173,7 +175,7 @@ async fn connect_to_target(
 #[allow(clippy::module_name_repetitions)]
 pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("127.0.0.1:{}", port);
-    println!("http proxy listening on {}", addr);
+    info!("http proxy listening on {}", addr);
     let addr = addr.parse::<SocketAddr>()?;
 
     let mut listener = TcpListener::bind(&addr).await?;
@@ -209,7 +211,7 @@ pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>>
                         transport.send(&response).await.unwrap();
                     }
                     Err(e) => {
-                        dbg!(e);
+                        error!("{}", e);
                     }
                 }
             }

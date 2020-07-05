@@ -1,4 +1,5 @@
 use http::{Request, Response};
+use async_trait::async_trait;
 
 pub enum RequestCapture {
     CircumventedResponse(Response<Vec<u8>>),
@@ -12,7 +13,8 @@ pub enum ResponseCapture {
 }
 
 #[allow(clippy::module_name_repetitions)]
+#[async_trait]
 pub trait MitmLayer {
-    fn capture_request(&self, request: &Request<Vec<u8>>) -> RequestCapture;
-    fn capture_response(&self, request: &Request<Vec<u8>>, response: &Response<Vec<u8>>) -> ResponseCapture;
+    async fn capture_request(&self, request: &Request<Vec<u8>>) -> RequestCapture;
+    async fn capture_response(&self, request: &Request<Vec<u8>>, response: &Response<Vec<u8>>) -> ResponseCapture;
 }
