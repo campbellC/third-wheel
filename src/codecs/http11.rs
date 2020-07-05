@@ -313,8 +313,8 @@ mod response_encoding_test {
     fn decode_200_chunked() {
         let mut server: HttpServer = HttpServer {};
         let mut buf: BytesMut = BytesMut::with_capacity(1000);
-        let response = "HTTP/1.1 200 OK\r\nTransfer-encoding: chunked\r\n\r\n1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n";
-        buf.put(response);
+        let response = b"HTTP/1.1 200 OK\r\nTransfer-encoding: chunked\r\n\r\n1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n";
+        buf.put(&response[..]);
         let expected = Response::builder()
             .version(http::Version::HTTP_11)
             .status(http::StatusCode::OK)
@@ -339,7 +339,7 @@ mod response_encoding_test {
             .unwrap();
         let mut dst: BytesMut = BytesMut::with_capacity(1000);
 
-        client.encode(response, &mut dst).unwrap();
+        client.encode(&response, &mut dst).unwrap();
 
         assert_eq!(expected.to_vec(), dst.to_vec());
     }
@@ -364,7 +364,7 @@ mod response_encoding_test {
             .body(b"<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\n<TITLE>301 Moved</TITLE></HEAD><BODY>\n<H1>301 Moved</H1>\nThe document has moved\n<A HREF=\"https://www.google.com/\">here</A>.\r\n</BODY></HTML>\r\n".to_vec()).unwrap();
         let mut dst: BytesMut = BytesMut::with_capacity(1000);
 
-        client.encode(response, &mut dst).unwrap();
+        client.encode(&response, &mut dst).unwrap();
 
         assert_eq!(expected.to_vec(), dst.to_vec());
     }
@@ -373,8 +373,8 @@ mod response_encoding_test {
     fn decode_302_google_response() {
         let mut server: HttpServer = HttpServer {};
         let mut buf: BytesMut = BytesMut::with_capacity(1000);
-        let response = "HTTP/1.1 301 Moved Permanently\r\nLocation: https://www.google.com/\r\nContent-Type: text/html; charset=UTF-8\r\nDate: Sun, 17 Nov 2019 13:37:35 GMT\r\nExpires: Tue, 17 Dec 2019 13:37:35 GMT\r\nCache-Control: public, max-age=2592000\r\nServer: gws\r\nContent-Length: 220\r\nX-XSS-Protection: 0\r\nX-Frame-Options: SAMEORIGIN\r\nAlt-Svc: quic=\":443\"; ma=2592000; v=\"46,43\",h3-Q050=\":443\"; ma=2592000,h3-Q049=\":443\"; ma=2592000,h3-Q048=\":443\"; ma=2592000,h3-Q046=\":443\"; ma=2592000,h3-Q043=\":443\"; ma=2592000\r\n\r\n<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\n<TITLE>301 Moved</TITLE></HEAD><BODY>\n<H1>301 Moved</H1>\nThe document has moved\n<A HREF=\"https://www.google.com/\">here</A>.\r\n</BODY></HTML>\r\n";
-        buf.put(response);
+        let response = b"HTTP/1.1 301 Moved Permanently\r\nLocation: https://www.google.com/\r\nContent-Type: text/html; charset=UTF-8\r\nDate: Sun, 17 Nov 2019 13:37:35 GMT\r\nExpires: Tue, 17 Dec 2019 13:37:35 GMT\r\nCache-Control: public, max-age=2592000\r\nServer: gws\r\nContent-Length: 220\r\nX-XSS-Protection: 0\r\nX-Frame-Options: SAMEORIGIN\r\nAlt-Svc: quic=\":443\"; ma=2592000; v=\"46,43\",h3-Q050=\":443\"; ma=2592000,h3-Q049=\":443\"; ma=2592000,h3-Q048=\":443\"; ma=2592000,h3-Q046=\":443\"; ma=2592000,h3-Q043=\":443\"; ma=2592000\r\n\r\n<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\n<TITLE>301 Moved</TITLE></HEAD><BODY>\n<H1>301 Moved</H1>\nThe document has moved\n<A HREF=\"https://www.google.com/\">here</A>.\r\n</BODY></HTML>\r\n";
+        buf.put(&response[..]);
         let expected = Response::builder()
             .version(http::Version::HTTP_11)
             .status(http::StatusCode::MOVED_PERMANENTLY)
@@ -399,8 +399,8 @@ mod response_encoding_test {
     fn decode_unfinished_chunked() {
         let mut server: HttpServer = HttpServer {};
         let mut buf: BytesMut = BytesMut::with_capacity(1000);
-        let request = "HTTP/1.1 200 OK\r\nTransfer-encoding: chunked\r\n\r\n1\r\na";
-        buf.put(request);
+        let request = b"HTTP/1.1 200 OK\r\nTransfer-encoding: chunked\r\n\r\n1\r\na";
+        buf.put(&request[..]);
 
         let request = server.decode(&mut buf);
 
@@ -412,8 +412,8 @@ mod response_encoding_test {
     fn decode_unfinished_headers() {
         let mut server: HttpServer = HttpServer {};
         let mut buf: BytesMut = BytesMut::with_capacity(1000);
-        let request = "HTTP/1.1 200 OK\r\nTransfer";
-        buf.put(request);
+        let request = b"HTTP/1.1 200 OK\r\nTransfer";
+        buf.put(&request[..]);
 
         let request = server.decode(&mut buf);
 
@@ -461,7 +461,7 @@ mod request_encoding_test {
         let expected_bytes = b"GET / HTTP/1.1\r\nhost: google.com\r\n\r\n";
         let mut dst = BytesMut::with_capacity(1000);
 
-        server.encode(request, &mut dst).unwrap();
+        server.encode(&request, &mut dst).unwrap();
 
         assert_eq!(expected_bytes.to_vec(), dst.to_vec());
     }
@@ -470,8 +470,8 @@ mod request_encoding_test {
     fn decode_get() {
         let mut client: HttpClient = HttpClient {};
         let mut buf: BytesMut = BytesMut::with_capacity(1000);
-        let request = "GET / HTTP/1.1\r\nHost: google.com\r\n\r\n";
-        buf.put(request);
+        let request = b"GET / HTTP/1.1\r\nHost: google.com\r\n\r\n";
+        buf.put(&request[..]);
         let expected = Request::builder()
             .method(http::Method::GET)
             .version(http::Version::HTTP_11)
@@ -498,7 +498,7 @@ mod request_encoding_test {
         let expected_bytes = b"POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n";
         let mut dst = BytesMut::with_capacity(1000);
 
-        server.encode(request, &mut dst).unwrap();
+        server.encode(&request, &mut dst).unwrap();
 
         assert_eq!(expected_bytes.to_vec(), dst.to_vec());
     }
@@ -507,8 +507,8 @@ mod request_encoding_test {
     fn decode_post_chunked() {
         let mut client: HttpClient = HttpClient {};
         let mut buf: BytesMut = BytesMut::with_capacity(1000);
-        let request = "POST / HTTP/1.1\r\nTransfer-encoding: chunked\r\n\r\n1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n";
-        buf.put(request);
+        let request = b"POST / HTTP/1.1\r\nTransfer-encoding: chunked\r\n\r\n1\r\na\r\na\r\nabcdefghij\r\n0\r\n\r\n";
+        buf.put(&request[..]);
         let expected = Request::builder()
             .method(http::Method::POST)
             .version(http::Version::HTTP_11)
@@ -526,8 +526,8 @@ mod request_encoding_test {
     fn decode_post_chunked_not_finished() {
         let mut client: HttpClient = HttpClient {};
         let mut buf: BytesMut = BytesMut::with_capacity(1000);
-        let request = "POST / HTTP/1.1\r\nTransfer-encoding: chunked\r\n\r\n1\r\n";
-        buf.put(request);
+        let request = b"POST / HTTP/1.1\r\nTransfer-encoding: chunked\r\n\r\n1\r\n";
+        buf.put(&request[..]);
 
         let request = client.decode(&mut buf);
 
@@ -539,8 +539,8 @@ mod request_encoding_test {
     fn decode_post_content_length() {
         let mut client: HttpClient = HttpClient {};
         let mut buf: BytesMut = BytesMut::with_capacity(1000);
-        let request = "POST / HTTP/1.1\r\nContent-length: 10\r\n\r\nabcdefgh\r\n";
-        buf.put(request);
+        let request = b"POST / HTTP/1.1\r\nContent-length: 10\r\n\r\nabcdefgh\r\n";
+        buf.put(&request[..]);
         let expected = Request::builder()
             .method(http::Method::POST)
             .version(http::Version::HTTP_11)
@@ -567,7 +567,7 @@ mod request_encoding_test {
         let expected_bytes = b"POST / HTTP/1.1\r\ncontent-length: 10\r\n\r\nabcdefghij";
         let mut dst: BytesMut = BytesMut::with_capacity(1000);
 
-        server.encode(request, &mut dst).unwrap();
+        server.encode(&request, &mut dst).unwrap();
 
         assert_eq!(expected_bytes.to_vec(), dst.to_vec());
     }
@@ -576,8 +576,8 @@ mod request_encoding_test {
     fn decode_not_finished_chunked() {
         let mut client: HttpClient = HttpClient {};
         let mut buf: BytesMut = BytesMut::with_capacity(1000);
-        let request = "POST / HTTP/1.1\r\nTransfer-encoding: chunked\r\n\r\n1\r\na\r\n";
-        buf.put(request);
+        let request = b"POST / HTTP/1.1\r\nTransfer-encoding: chunked\r\n\r\n1\r\na\r\n";
+        buf.put(&request[..]);
 
         let request = client.decode(&mut buf);
 
@@ -589,8 +589,8 @@ mod request_encoding_test {
     fn decode_unfinished_headers() {
         let mut client: HttpClient = HttpClient {};
         let mut buf: BytesMut = BytesMut::with_capacity(1000);
-        let request = "POST / HTTP/1.1\r\nTransfer";
-        buf.put(request);
+        let request = b"POST / HTTP/1.1\r\nTransfer";
+        buf.put(&request[..]);
 
         let request = client.decode(&mut buf);
 
