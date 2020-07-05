@@ -1,2 +1,2 @@
 mod body;
-pub mod http11;
+pub(crate) mod http11;

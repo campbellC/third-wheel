@@ -17,7 +17,7 @@ use crate::codecs::http11::{HttpClient, HttpServer};
 use crate::SafeResult;
 
 pub(crate) mod mitm;
-pub use self::mitm::{MitmLayer, RequestCapture, ResponseCapture};
+use self::mitm::{MitmLayer, RequestCapture, ResponseCapture};
 
 use http::header::HeaderName;
 

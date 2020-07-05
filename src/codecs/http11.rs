@@ -37,7 +37,7 @@ use super::body::BodyParser;
 
 
 
-pub struct HttpServer;
+pub(crate) struct HttpServer;
 
 impl Encoder<&Request<Vec<u8>>> for HttpServer {
     type Error = io::Error;
@@ -155,7 +155,7 @@ impl Decoder for HttpServer {
     }
 }
 
-pub struct HttpClient;
+pub(crate) struct HttpClient;
 
 //TODO: modify this for different versions of HTTP1?
 impl Encoder<&Response<Vec<u8>>> for HttpClient {
