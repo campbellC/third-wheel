@@ -1,4 +1,4 @@
-# Quick start guid
+# Quick start guide
 Run the script `generate_ca.sh` to generate a certificate for developing with.
 
 To test the proxy use curl
@@ -7,12 +7,12 @@ curl --cacert ./ca/ca_certs/cert.pem -x http://127.0.0.1:8080/ https://example.c
 ```
 
 # Detailed guide to how this all works
-We need a certificate authority to test mitm with while developing. Ideally this would not require overriding the OS ca list. According to [this blog](https://gist.github.com/olih/a50ce2181a657eefb041) this just means doing 
+We need a certificate authority to test mitm with while developing. Ideally this would not require overriding the OS ca list. According to [this blog](https://gist.github.com/olih/a50ce2181a657eefb041) this just means doing
 
 ```bash
 curl --cacert bla.pem https://dev.dev
 ```
-to test this with curl. I'm sure browsers have their own set of requirements for certificate signing but this will get us off the ground. 
+to test this with curl. I'm sure browsers have their own set of requirements for certificate signing but this will get us off the ground.
 
 
 In order to test this we need to:
@@ -108,10 +108,9 @@ httpd.socket = ssl.wrap_socket(httpd.socket,
 httpd.serve_forever()
 ```
 
-Then in a seperate terminal we run 
+Then in a seperate terminal we run
 ```bash
 curl --cacert cert.pem  https://my_test_site.com
 ```
 
 And this returns the standard http request - importantly, curl accepts the certificate as valid!
-

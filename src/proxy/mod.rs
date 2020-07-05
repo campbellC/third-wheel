@@ -1,20 +1,22 @@
+use futures::sink::SinkExt;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use futures::sink::SinkExt;
+
+use log::{info, error};
 
 use http::{Request, Response};
 use openssl::pkey::{PKey, Private};
 use openssl::x509::X509;
-use tokio_util::codec::Framed;
 use tokio::net::{TcpListener, TcpStream};
-use tokio_native_tls::{TlsAcceptor, TlsStream};
 use tokio::stream::StreamExt;
+use tokio_native_tls::{TlsAcceptor, TlsStream};
+use tokio_util::codec::Framed;
 
 use crate::certificates::{load_key_from_file, native_identity, spoof_certificate, CA};
 use crate::codecs::http11::{HttpClient, HttpServer};
 use crate::SafeResult;
 
-pub mod mitm;
+pub(crate) mod mitm;
 pub use self::mitm::{MitmLayer, RequestCapture, ResponseCapture};
 
 use http::header::HeaderName;
@@ -25,16 +27,12 @@ lazy_static! {
     static ref KEY: PKey<Private> = load_key_from_file("ca/ca_certs/key.pem").unwrap();
 }
 
-pub async fn start_mitm<T>(
-    port: u16,
-    mitm: Arc<T>,
-) -> Result<(), Box<dyn std::error::Error>>
+pub async fn start_mitm<T>(port: u16, mitm: Arc<T>) -> Result<(), Box<dyn std::error::Error>>
 where
-    T: MitmLayer + std::marker::Sync + std::marker::Send,
-    T: 'static,
+    T: MitmLayer + std::marker::Sync + std::marker::Send + 'static,
 {
     let addr = format!("127.0.0.1:{}", port);
-    println!("mitm proxy listening on {}", addr);
+    info!("mitm proxy listening on {}", addr);
     let addr = addr.parse::<SocketAddr>()?;
     let mut new_client_listener = TcpListener::bind(&addr).await?;
 
@@ -53,7 +51,7 @@ where
                     }
                 }
                 Err(e) => {
-                    dbg!(e);
+                    error!("{}", e);
                 }
             }
         } else {
@@ -62,28 +60,23 @@ where
     }
 }
 
-async fn tls_mitm_wrapper<T>(
+async fn tls_mitm_wrapper(
     client_stream: Framed<TcpStream, HttpClient>,
     opening_request: Request<Vec<u8>>,
-    mitm: Arc<T>,
-) where
-    T: MitmLayer,
-{
+    mitm: Arc<impl MitmLayer>,
+) {
     tls_mitm(client_stream, opening_request, &CERT_AUTH, &KEY, mitm)
         .await
         .unwrap();
 }
 
-async fn tls_mitm<T>(
+async fn tls_mitm(
     mut client_stream: Framed<TcpStream, HttpClient>,
     opening_request: Request<Vec<u8>>,
     cert_auth: &CA,
     private_key: &PKey<Private>,
-    mitm: Arc<T>,
-) -> SafeResult
-where
-    T: MitmLayer
-{
+    mitm: Arc<impl MitmLayer>,
+) -> SafeResult {
     let (host, port) = target_host_port(&opening_request);
     let (mut target_stream, server_certificate) = connect_to_target(&host, &port).await;
     client_stream
@@ -103,7 +96,7 @@ where
 
     while let Some(request) = client_stream.next().await {
         let mut request = request.unwrap();
-        match mitm.capture_request(&request) {
+        match mitm.capture_request(&request).await {
             RequestCapture::CircumventedResponse(response) => {
                 client_stream.send(&response).await.unwrap();
                 continue;
@@ -117,7 +110,7 @@ where
         target_stream.send(&request).await?;
 
         let mut response = target_stream.next().await.unwrap()?;
-        match mitm.capture_response(&request, &response) {
+        match mitm.capture_response(&request, &response).await {
             ResponseCapture::ModifiedResponse(new_response) => {
                 response = new_response;
             }
@@ -179,9 +172,10 @@ async fn connect_to_target(
     (Framed::new(target_stream, HttpServer), certificate)
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("127.0.0.1:{}", port);
-    println!("http proxy listening on {}", addr);
+    info!("http proxy listening on {}", addr);
     let addr = addr.parse::<SocketAddr>()?;
 
     let mut listener = TcpListener::bind(&addr).await?;
@@ -217,7 +211,7 @@ pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>>
                         transport.send(&response).await.unwrap();
                     }
                     Err(e) => {
-                        dbg!(e);
+                        error!("{}", e);
                     }
                 }
             }

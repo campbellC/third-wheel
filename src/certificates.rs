@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io;
+use log::debug;
 
 use openssl::asn1::Asn1Time;
 use openssl::bn::{BigNum, MsbOption};
@@ -35,7 +36,7 @@ impl CA {
     }
 }
 
-pub fn load_key_from_file(key_file: &str) -> Result<PKey<Private>, Box<dyn std::error::Error>> {
+pub(crate) fn load_key_from_file(key_file: &str) -> Result<PKey<Private>, Box<dyn std::error::Error>> {
     let mut key_file = File::open(key_file)?;
     let mut key: Vec<u8> = vec![];
     io::copy(&mut key_file, &mut key)?;
@@ -174,20 +175,18 @@ pub(crate) fn spoof_certificate(
 
 #[allow(dead_code)]
 fn print_certificate(certificate: &X509) {
-    println!("New certificate");
+    debug!("New certificate");
 
-    println!("subject_name:");
+    debug!("subject_name:");
     for entry in certificate.subject_name().entries() {
-        println!("{}: {}", entry.object(), entry.data().as_utf8().unwrap());
+        debug!("{}: {}", entry.object(), entry.data().as_utf8().unwrap());
     }
-    println!();
-    println!("issuer_name:");
+    debug!("issuer_name:");
     for entry in certificate.issuer_name().entries() {
-        println!("{}: {}", entry.object(), entry.data().as_utf8().unwrap());
+        debug!("{}: {}", entry.object(), entry.data().as_utf8().unwrap());
     }
-    println!();
 
-    println!("subject_alt_names");
+    debug!("subject_alt_names");
     for general_name in certificate
         .subject_alt_names()
         .unwrap_or_else(|| Stack::new().unwrap())
@@ -195,9 +194,8 @@ fn print_certificate(certificate: &X509) {
     {
         print_general_name(general_name);
     }
-    println!();
 
-    println!("issuer_alt_names");
+    debug!("issuer_alt_names");
     for general_name in certificate
         .issuer_alt_names()
         .unwrap_or_else(|| Stack::new().unwrap())
@@ -205,57 +203,49 @@ fn print_certificate(certificate: &X509) {
     {
         print_general_name(general_name);
     }
-    println!();
 
-    println!("public_key: {:?}", certificate.public_key());
-    println!();
+    debug!("public_key: {:?}", certificate.public_key());
 
-    println!("not_after: {}", certificate.not_after());
-    println!("not_before: {}", certificate.not_before());
-    println!();
+    debug!("not_after: {}", certificate.not_after());
+    debug!("not_before: {}", certificate.not_before());
 
-    println!("Signature: ");
-    println!("{:x?}", certificate.signature().as_slice());
-    println!();
+    debug!("Signature: ");
+    debug!("{:x?}", certificate.signature().as_slice());
 
-    println!(
+    debug!(
         "Signature algorithm: {}",
         certificate.signature_algorithm().object()
     );
-    println!();
 
-    println!("ocsp_responders:");
+    debug!("ocsp_responders:");
     let responders = certificate.ocsp_responders();
     match responders {
         Ok(stack) => {
             for responder in stack.iter() {
-                println!("{:?}", responder);
+                debug!("{:?}", responder);
             }
         }
-        Err(err) => println!("Responders threw error: {}", err),
+        Err(err) => debug!("Responders threw error: {}", err),
     }
 
     let serial_number = certificate.serial_number().to_bn();
     match serial_number {
-        Ok(sn) => println!("{}", sn),
-        Err(err) => println!("Responders threw error: {}", err),
+        Ok(sn) => debug!("{}", sn),
+        Err(err) => debug!("Responders threw error: {}", err),
     }
-    println!();
-
-    println!();
 }
 
 fn print_general_name(general_name: &GeneralNameRef) {
     if let Some(email) = general_name.email() {
-        println!("email: {}", email);
+        debug!("email: {}", email);
     }
     if let Some(dnsname) = general_name.dnsname() {
-        println!("dnsname: {}", dnsname);
+        debug!("dnsname: {}", dnsname);
     }
     if let Some(uri) = general_name.uri() {
-        println!("uri: {}", uri);
+        debug!("uri: {}", uri);
     }
     if let Some(ipaddress) = general_name.ipaddress() {
-        println!("ipaddress: {:?}", ipaddress);
+        debug!("ipaddress: {:?}", ipaddress);
     }
 }

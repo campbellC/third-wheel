@@ -35,6 +35,8 @@ use tokio_util::codec::{Decoder, Encoder};
 
 use super::body::BodyParser;
 
+
+
 pub struct HttpServer;
 
 impl Encoder<&Request<Vec<u8>>> for HttpServer {
@@ -61,23 +63,7 @@ impl Encoder<&Request<Vec<u8>>> for HttpServer {
         dst.extend_from_slice(b"\r\n");
         dst.extend_from_slice(item.body());
 
-        return Ok(());
-
-        // Right now `write!` on `Vec<u8>` goes through io::Write and is not
-        // super speedy, so inline a less-crufty implementation here which
-        // doesn't go through io::Error.
-        struct BytesWrite<'a>(&'a mut BytesMut);
-
-        impl fmt::Write for BytesWrite<'_> {
-            fn write_str(&mut self, s: &str) -> fmt::Result {
-                self.0.extend_from_slice(s.as_bytes());
-                Ok(())
-            }
-
-            fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> fmt::Result {
-                fmt::write(self, args)
-            }
-        }
+        Ok(())
     }
 }
 
@@ -196,23 +182,7 @@ impl Encoder<&Response<Vec<u8>>> for HttpClient {
         dst.extend_from_slice(b"\r\n");
         dst.extend_from_slice(item.body());
 
-        return Ok(());
-
-        // Right now `write!` on `Vec<u8>` goes through io::Write and is not
-        // super speedy, so inline a less-crufty implementation here which
-        // doesn't go through io::Error.
-        struct BytesWrite<'a>(&'a mut BytesMut);
-
-        impl fmt::Write for BytesWrite<'_> {
-            fn write_str(&mut self, s: &str) -> fmt::Result {
-                self.0.extend_from_slice(s.as_bytes());
-                Ok(())
-            }
-
-            fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> fmt::Result {
-                fmt::write(self, args)
-            }
-        }
+        Ok(())
     }
 }
 
@@ -297,10 +267,10 @@ impl Decoder for HttpClient {
             ret = ret.header(&pre_body[k.0..k.1], value);
         }
 
-        let req = ret
+        let ret = ret
             .body(src.to_vec())
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        Ok(Some(req))
+        Ok(Some(ret))
     }
 }
 
@@ -618,5 +588,21 @@ mod request_encoding_test {
                 v
             );
         }
+    }
+}
+
+// Right now `write!` on `Vec<u8>` goes through io::Write and is not
+// super speedy, so inline a less-crufty implementation here which
+// doesn't go through io::Error.
+struct BytesWrite<'a>(&'a mut BytesMut);
+
+impl fmt::Write for BytesWrite<'_> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.0.extend_from_slice(s.as_bytes());
+        Ok(())
+    }
+
+    fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> fmt::Result {
+        fmt::write(self, args)
     }
 }
