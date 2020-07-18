@@ -10,10 +10,13 @@ description = "third-wheel is a TLS man-in-the-middle proxy written in rust, wit
 repository = "https://www.github.com/campbellC/third-wheel"
 license = "MIT"
 
+[features]
+binaries = ['argh', 'simple_logger']
+
+
 [dependencies]
 openssl = "0.10.30"
 httparse = "1.3.4"
-clap = "2.33.0"
 bytes = "0.5.4"
 http = "0.2.1"
 futures = "0.3.5"
@@ -23,6 +26,8 @@ tokio-native-tls = "0.1.0"
 lazy_static = "1.4.0"
 log = "^0.4"
 async-trait = "^0.1"
+argh = {version="^0.1", optional = true}
+simple_logger = {version="^1", optional=true}
 
 [dependencies.tokio]
 version = "0.2.21"
@@ -31,3 +36,11 @@ features = ["macros", "rt-threaded", "tcp", "io-util", "tcp", "dns"]
 [dependencies.tokio-util]
 version = "0.3.1"
 features = ["codec"]
+
+[[bin]]
+name = "sign_cert_for_site"
+required-features = ["binaries"]
+
+[[bin]]
+name = "trivial_mitm"
+required-features = ["binaries"]

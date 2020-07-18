@@ -16,8 +16,8 @@ sudo docker build . --tag chrome_testing:latest
 popd
 
 # build first to make `cargo run` happen really quickly ;)
-cargo build
-cargo run -- mitm -p 8080 &
+cargo build --features binaries
+cargo run --features binaries --bin trivial_mitm -- -p 8080 &
 echo "Sleeping to let third-wheel start running"
 sleep 1
 

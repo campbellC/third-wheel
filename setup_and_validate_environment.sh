@@ -7,7 +7,7 @@ set -o xtrace
 pushd ./ca/ca_certs
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/C=US/ST=private/L=province/O=city/CN=hostname.example.com"
 popd
-cargo run --bin=third-wheel -- sign-cert-for-domain my_test_site.com -o ca/simple_server/localhost.pem
+cargo run --features="binaries" --bin=sign_cert_for_site -- my_test_site.com -o ca/simple_server/localhost.pem
 cat ca/ca_certs/key.pem >> ca/simple_server/localhost.pem
 pushd ./ca/simple_server
 python3 server.py &

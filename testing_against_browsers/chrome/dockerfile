@@ -15,7 +15,7 @@ RUN apt-get install -y python3-venv && \
 
 FROM chromium_image as cert_image
 COPY ./ca_certs/cert.pem /tmp/mitm.crt
-RUN apt-get install -y libnss3-tools &&\
+RUN apt-get update && apt-get install -y libnss3-tools &&\
   mkdir -p $HOME/.pki/nssdb &&\
   certutil -d $HOME/.pki/nssdb -N --empty-password
 RUN certutil -d sql:$HOME/.pki/nssdb -A -n 'mitm cert authority' -i /tmp/mitm.crt -t "C,,"
