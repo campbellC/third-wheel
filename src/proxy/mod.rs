@@ -1,8 +1,7 @@
 use futures::sink::SinkExt;
 use std::net::SocketAddr;
-use std::sync::Arc;
 
-use log::{info, error};
+use log::{error, info};
 
 use http::{Request, Response};
 use openssl::pkey::{PKey, Private};
@@ -27,9 +26,9 @@ lazy_static! {
     static ref KEY: PKey<Private> = load_key_from_file("ca/ca_certs/key.pem").unwrap();
 }
 
-pub async fn start_mitm<T>(port: u16, mitm: Arc<T>) -> Result<(), Box<dyn std::error::Error>>
+pub async fn start_mitm<T>(port: u16, mitm: T) -> Result<(), Box<dyn std::error::Error>>
 where
-    T: MitmLayer + std::marker::Sync + std::marker::Send + 'static,
+    T: MitmLayer + std::marker::Sync + std::marker::Send + 'static + Clone,
 {
     let addr = format!("127.0.0.1:{}", port);
     info!("mitm proxy listening on {}", addr);
@@ -63,7 +62,7 @@ where
 async fn tls_mitm_wrapper(
     client_stream: Framed<TcpStream, HttpClient>,
     opening_request: Request<Vec<u8>>,
-    mitm: Arc<impl MitmLayer>,
+    mitm: impl MitmLayer,
 ) {
     tls_mitm(client_stream, opening_request, &CERT_AUTH, &KEY, mitm)
         .await
@@ -75,7 +74,7 @@ async fn tls_mitm(
     opening_request: Request<Vec<u8>>,
     cert_auth: &CA,
     private_key: &PKey<Private>,
-    mitm: Arc<impl MitmLayer>,
+    mitm: impl MitmLayer,
 ) -> SafeResult {
     let (host, port) = target_host_port(&opening_request);
     let (mut target_stream, server_certificate) = connect_to_target(&host, &port).await;
@@ -151,10 +150,9 @@ async fn connect_to_target(
     host: &str,
     port: &str,
 ) -> (Framed<TlsStream<TcpStream>, HttpServer>, X509) {
-    // This format! *cannot* be inlined due to a compiler issue
-    // https://github.com/rust-lang/rust/issues/64477
-    let target_address = format!("{}:{}", host, port);
-    let target_stream = TcpStream::connect(target_address).await.unwrap();
+    let target_stream = TcpStream::connect(format!("{}:{}", host, port))
+        .await
+        .unwrap();
     let connector = native_tls::TlsConnector::builder().build().unwrap();
     let tokio_connector = tokio_native_tls::TlsConnector::from(connector);
     let target_stream = tokio_connector.connect(&host, target_stream).await.unwrap();
@@ -197,10 +195,9 @@ pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>>
                                 .as_bytes(),
                         ))
                         .unwrap();
-                        // This format! cannot be inlined due to a compiler issue
-                        // https://github.com/rust-lang/rust/issues/64477
-                        let target_address = format!("{}:80", host);
-                        let target_stream = TcpStream::connect(target_address).await.unwrap();
+
+                        let target_stream =
+                            TcpStream::connect(format!("{}:80", host)).await.unwrap();
                         let mut target_transport = Framed::new(target_stream, HttpServer);
                         target_transport.send(&request).await.unwrap();
                         let response = target_transport

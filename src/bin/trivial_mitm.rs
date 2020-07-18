@@ -15,8 +15,20 @@ struct StartMitm {
 }
 
 struct EmptyCapturer;
+// Since this is the same crate we can actually impl MitmLayer for
+// Arc<EmptyCapturer> directly. However, since this code should also be an
+// example of how to use the library we wrap in a struct to show how to avoid
+// the orphan rules
+struct WrapperStruct (Arc<EmptyCapturer>);
+
+impl Clone for WrapperStruct {
+    fn clone(&self) -> Self {
+        WrapperStruct {0: Arc::clone(&self.0)}
+    }
+}
+
 #[async_trait]
-impl MitmLayer for EmptyCapturer {
+impl MitmLayer for WrapperStruct {
     async fn capture_request(&self, _: &Request<Vec<u8>>) -> RequestCapture {
         RequestCapture::Continue
     }
@@ -34,7 +46,7 @@ async fn main() -> SafeResult {
     let args: StartMitm = argh::from_env();
     start_mitm(
         args.port,
-        Arc::new(EmptyCapturer {}),
+        WrapperStruct {0: Arc::new(EmptyCapturer {})},
     )
         .await
 }
