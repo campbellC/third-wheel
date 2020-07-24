@@ -1,6 +1,6 @@
 [package]
 name = "third-wheel"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Chris Campbell <campbellC@user.noreply.github.com>"]
 edition = "2018"
 readme = "README.md"
@@ -12,6 +12,7 @@ license = "MIT"
 
 [features]
 binaries = ['argh', 'simple_logger']
+har-capture = ['binaries', 'har', 'cookie']
 
 
 [dependencies]
@@ -28,10 +29,12 @@ log = "^0.4"
 async-trait = "^0.1"
 argh = {version="^0.1", optional = true}
 simple_logger = {version="^1", optional=true}
+har = {version = "^0.5", optional=true}
+cookie = {version = "^0.14", optional=true}
 
 [dependencies.tokio]
 version = "0.2.21"
-features = ["macros", "rt-threaded", "tcp", "io-util", "tcp", "dns"]
+features = ["macros", "rt-threaded", "tcp", "io-util", "tcp", "dns", "time"]
 
 [dependencies.tokio-util]
 version = "0.3.1"
@@ -44,3 +47,7 @@ required-features = ["binaries"]
 [[bin]]
 name = "trivial_mitm"
 required-features = ["binaries"]
+
+[[bin]]
+name = "har-capture"
+required-features = ["har-capture"]
