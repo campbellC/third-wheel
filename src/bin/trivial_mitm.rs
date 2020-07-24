@@ -29,11 +29,11 @@ impl Clone for WrapperStruct {
 
 #[async_trait]
 impl MitmLayer for WrapperStruct {
-    async fn capture_request(&self, _: &Request<Vec<u8>>) -> RequestCapture {
+    async fn capture_request(&mut self, _: &Request<Vec<u8>>) -> RequestCapture {
         RequestCapture::Continue
     }
     async fn capture_response(
-        &self,
+        &mut self,
         _: &Request<Vec<u8>>,
         _: &Response<Vec<u8>>,
     ) -> ResponseCapture {

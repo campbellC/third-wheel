@@ -74,7 +74,7 @@ async fn tls_mitm(
     opening_request: Request<Vec<u8>>,
     cert_auth: &CA,
     private_key: &PKey<Private>,
-    mitm: impl MitmLayer,
+    mut mitm: impl MitmLayer,
 ) -> SafeResult {
     let (host, port) = target_host_port(&opening_request);
     let (mut target_stream, server_certificate) = connect_to_target(&host, &port).await;
