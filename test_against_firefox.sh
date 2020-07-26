@@ -16,8 +16,8 @@ sudo docker build . --tag firefox_testing:latest
 popd
 
 # build first to make `cargo run` happen really quickly ;)
-cargo build --features binaries
-cargo run --features binaries --bin trivial_mitm -- -p 8080 &
+cargo build --example trivial_mitm
+cargo run --example trivial_mitm -- -p 8080 &
 echo "Sleeping to let third-wheel start running"
 sleep 1
 

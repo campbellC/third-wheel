@@ -15,11 +15,11 @@ third-wheel is a TLS man-in-the-middle proxy written in rust, with the aim of be
 ### Usage
 third-wheel is a library so you can modify it's behaviour in order to capture traffic, or modify it en route. It also comes with some binaries which can be found in `src/bin`. These require the `binaries` feature to be switched on. FOr example, `trivial_mitm` simply proxies the traffic but does not do anything to it, you can run with `cargo run`. For example:
 ```
-cargo run --features binaries --bin trivial_mitm -- -h
+cargo run --example trivial_mitm -- -h
 ```
 will give you some hints. If you just want a TLS mitm proxy:
 ```
-cargo run --features binaries --bin trivial_mitm -- -p 8080
+cargo run --example trivial_mitm -- -p 8080
 ```
 will get it running on port 8080.
 
