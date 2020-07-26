@@ -1,5 +1,5 @@
 ### third-wheel
-third-wheel is a TLS man-in-the-middle proxy written in rust, with the aim of being lightweight and fast. It is currently in pre-alpha stage.
+third-wheel is a TLS man-in-the-middle proxy written in rust, with the aim of being lightweight and fast. It is currently in alpha stage.
 
 ### Usage
 third-wheel is a library so you can modify it's behaviour in order to capture traffic, or modify it en route. It also comes with some binaries which can be found in `src/bin`. These require the `binaries` feature to be switched on. FOr example, `trivial_mitm` simply proxies the traffic but does not do anything to it, you can run with `cargo run`. For example:
