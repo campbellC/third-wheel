@@ -1,3 +1,14 @@
+[![Crates.io][crates-badge]][crates-url]
+[![docs.rs][docs-badge]][docs-url]
+[![MIT licensed][mit-badge]][mit-url]
+
+[crates-badge]: https://img.shields.io/crates/v/third-wheel.svg
+[crates-url]: https://crates.io/crates/third-wheel
+[docs-badge]: https://docs.rs/third-wheel/badge.svg
+[docs-url]: https://docs.rs/third-wheel
+[mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
+[mit-url]: https://github.com/campbellC/third-wheel/blob/master/LICENSE
+
 ### third-wheel
 third-wheel is a TLS man-in-the-middle proxy written in rust, with the aim of being lightweight and fast. It is currently in alpha stage.
 
