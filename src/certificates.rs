@@ -16,9 +16,9 @@ use openssl::x509::{GeneralNameRef, X509Name, X509NameRef, X509};
 /// man-in-the-middle.
 pub struct CertificateAuthority {
     /// the certificate authority's self-signed certificate
-    pub(self) cert: X509,
+    pub(crate) cert: X509,
     /// the private signing key for the certificate authority
-    pub(self) key: PKey<Private>,
+    pub(crate) key: PKey<Private>,
 }
 
 impl CertificateAuthority {
@@ -38,14 +38,6 @@ impl CertificateAuthority {
 
         Ok(CertificateAuthority { cert, key })
     }
-}
-
-pub(crate) fn load_key_from_file(key_file: &str) -> Result<PKey<Private>, Box<dyn std::error::Error>> {
-    let mut key_file = File::open(key_file)?;
-    let mut key: Vec<u8> = vec![];
-    io::copy(&mut key_file, &mut key)?;
-    //TODO: this unwrap doesn't feel right, need to get the types to match up properly
-    Ok(PKey::from_rsa(Rsa::private_key_from_pem(&key)?).unwrap())
 }
 
 pub(crate) fn native_identity(certificate: &X509, key: &PKey<Private>) -> native_tls::Identity {

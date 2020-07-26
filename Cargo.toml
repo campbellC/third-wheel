@@ -1,11 +1,11 @@
 [package]
 name = "third-wheel"
-version = "0.3.3"
+version = "0.4.0"
 authors = ["Chris Campbell <campbellC@user.noreply.github.com>"]
 edition = "2018"
 readme = "README.md"
 categories = ["network-programming", "command-line-utilities"]
-keywords = ["mitmproxy", "man-in-the-middle", "penetration"]
+keywords = ["mitmproxy", "man-in-the-middle"]
 description = "third-wheel is a TLS man-in-the-middle proxy written in rust, with the aim of being lightweight and fast. It is currently in pre-alpha stage."
 repository = "https://www.github.com/campbellC/third-wheel"
 license = "MIT"
@@ -19,7 +19,6 @@ futures = "0.3.5"
 time = "0.1.42"
 native-tls = "^0.2"
 tokio-native-tls = "0.1.0"
-lazy_static = "1.4.0"
 log = "^0.4"
 async-trait = "^0.1"
 

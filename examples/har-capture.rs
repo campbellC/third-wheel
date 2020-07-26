@@ -20,12 +20,22 @@ struct StartMitm {
     /// port to bind proxy to
     #[argh(option, short = 'p', default = "8080")]
     port: u16,
+
     /// output file to save the HAR to
     #[argh(option, short = 'o', default = "\"third-wheel.har\".to_string()")]
     outfile: String,
+
     /// number of seconds to run the proxy for
     #[argh(option, short = 's', default = "30")]
     seconds_to_run_for: u64,
+
+    /// pem file for self-signed certificate authority certificate
+    #[argh(option, short = 'c', default = "\"ca/ca_certs/cert.pem\".to_string()")]
+    cert_file: String,
+
+    /// pem file for private signing key for the certificate authority
+    #[argh(option, short = 'k', default = "\"ca/ca_certs/key.pem\".to_string()")]
+    key_file: String,
 }
 
 struct HarCapturer {
@@ -245,12 +255,13 @@ fn parse_cookie(cookie_str: &str) -> v1_2::Cookies {
 async fn main() -> SafeResult {
     simple_logger::init().unwrap();
     let args: StartMitm = argh::from_env();
+    let ca = CertificateAuthority::load_from_pem_files(&args.cert_file, &args.key_file)?;
     let capturer = Wrapper {
         inner: Arc::new(Mutex::new(HarCapturer::new())),
     };
     let result = timeout(
         Duration::from_secs(args.seconds_to_run_for),
-        start_mitm(args.port, capturer.clone()),
+        start_mitm(args.port, capturer.clone(), ca),
     )
     .await;
 
@@ -269,7 +280,7 @@ async fn main() -> SafeResult {
             pages: None,
             creator: v1_2::Creator {
                 name: "third-wheel".to_string(),
-                version: "0.3.1".to_string(),
+                version: "0.3".to_string(),
                 comment: None,
             },
         }),

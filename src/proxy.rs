@@ -1,17 +1,17 @@
 use futures::sink::SinkExt;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use log::{error, info};
 
 use http::{Request, Response};
-use openssl::pkey::{PKey, Private};
 use openssl::x509::X509;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::stream::StreamExt;
 use tokio_native_tls::{TlsAcceptor, TlsStream};
 use tokio_util::codec::Framed;
 
-use crate::certificates::{load_key_from_file, native_identity, spoof_certificate, CertificateAuthority};
+use crate::certificates::{native_identity, spoof_certificate, CertificateAuthority};
 use crate::codecs::http11::{HttpClient, HttpServer};
 use crate::SafeResult;
 
@@ -20,20 +20,15 @@ use self::mitm::{MitmLayer, RequestCapture, ResponseCapture};
 
 use http::header::HeaderName;
 
-lazy_static! {
-    static ref CERT_AUTH: crate::certificates::CertificateAuthority =
-        CertificateAuthority::load_from_pem_files("ca/ca_certs/cert.pem", "ca/ca_certs/key.pem").unwrap();
-    static ref KEY: PKey<Private> = load_key_from_file("ca/ca_certs/key.pem").unwrap();
-}
-
 /// Run a man-in-the-middle TLS proxy
 ///
 /// * `port` - port to accept requests from clients
 /// * `mitm` - A `MitmLayer` to capture and/or modify requests and responses
-pub async fn start_mitm<T>(port: u16, mitm: T) -> Result<(), Box<dyn std::error::Error>>
+pub async fn start_mitm<T>(port: u16, mitm: T, ca: CertificateAuthority) -> Result<(), Box<dyn std::error::Error>>
 where
     T: MitmLayer + std::marker::Sync + std::marker::Send + 'static + Clone,
 {
+    let ca = Arc::new(ca);
     let addr = format!("127.0.0.1:{}", port);
     info!("mitm proxy listening on {}", addr);
     let addr = addr.parse::<SocketAddr>()?;
@@ -50,6 +45,7 @@ where
                             transport,
                             proxy_opening_request,
                             mitm.clone(),
+                            ca.clone()
                         ));
                     }
                 }
@@ -67,8 +63,9 @@ async fn tls_mitm_wrapper(
     client_stream: Framed<TcpStream, HttpClient>,
     opening_request: Request<Vec<u8>>,
     mitm: impl MitmLayer,
+    ca: Arc<CertificateAuthority>
 ) {
-    tls_mitm(client_stream, opening_request, &CERT_AUTH, &KEY, mitm)
+    tls_mitm(client_stream, opening_request, &ca, mitm)
         .await
         .unwrap();
 }
@@ -76,8 +73,7 @@ async fn tls_mitm_wrapper(
 async fn tls_mitm(
     mut client_stream: Framed<TcpStream, HttpClient>,
     opening_request: Request<Vec<u8>>,
-    cert_auth: &CertificateAuthority,
-    private_key: &PKey<Private>,
+    cert_auth: &Arc<CertificateAuthority>,
     mut mitm: impl MitmLayer,
 ) -> SafeResult {
     let (host, port) = target_host_port(&opening_request);
@@ -93,7 +89,7 @@ async fn tls_mitm(
         .await?;
 
     let certificate = spoof_certificate(&server_certificate, cert_auth).unwrap();
-    let identity = native_identity(&certificate, private_key);
+    let identity = native_identity(&certificate, &cert_auth.key);
     let mut client_stream = convert_to_tls(client_stream, identity).await;
     let proxy_connection: HeaderName = HeaderName::from_lowercase(b"proxy-connection").unwrap();
 
