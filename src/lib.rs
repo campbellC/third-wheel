@@ -1,3 +1,9 @@
+//! third-wheel is a TLS man-in-the-middle proxy library. Using the crate allows
+//! you to intercept, re-route, modify etc. in-flight HTTP requests and responses
+//! between clients and servers. Client code just needs to provide a struct that `impl`'s
+//! `MitmLayer`. Examples use cases can be found as binaries in the crate.
+
+
 // Rustc lints
 // <https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html>
 #![warn(
@@ -41,8 +47,9 @@ mod codecs;
 extern crate lazy_static;
 
 pub use crate::certificates::create_signed_certificate_for_domain;
-pub use crate::certificates::CA;
-pub use proxy::{run_http_proxy, start_mitm};
+pub use crate::certificates::CertificateAuthority;
+pub use proxy:: start_mitm;
 pub use proxy::mitm::{RequestCapture, ResponseCapture, MitmLayer};
 
+/// A poorly named result type. This will be replaced in https://github.com/campbellC/third-wheel/issues/17
 pub type SafeResult = Result<(), Box<dyn std::error::Error>>;

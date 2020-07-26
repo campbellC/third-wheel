@@ -8,10 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use argh::FromArgs;
 use cookie::Cookie;
-use har::{
-    v1_2::{self, Entries, Headers},
-    Har,
-};
+use har::v1_2::{self, Entries, Headers};
 use http;
 
 use third_wheel::*;
@@ -40,10 +37,6 @@ impl HarCapturer {
         HarCapturer {
             entries: Vec::new(),
         }
-    }
-
-    fn add_entry(&mut self, entry: Entries) {
-        self.entries.push(entry);
     }
 }
 
@@ -134,7 +127,7 @@ fn copy_from_http_request_to_har(request: &http::Request<Vec<u8>>) -> v1_2::Requ
         .map(|(_, value)| value.to_str().unwrap().to_string())
         .nth(0)
         .unwrap_or("".to_string());
-    let post_data = if (body_size > 0) {
+    let post_data = if body_size > 0 {
         Some(v1_2::PostData {
             mime_type,
             text: body,
@@ -191,7 +184,7 @@ fn copy_from_http_response_to_har(response: &http::Response<Vec<u8>>) -> v1_2::R
         .nth(0)
         .unwrap_or("".to_string());
 
-    let redirect_url = if (response.status().is_redirection()) {
+    let redirect_url = if response.status().is_redirection() {
         response
             .headers()
             .iter()
@@ -252,7 +245,7 @@ fn parse_cookie(cookie_str: &str) -> v1_2::Cookies {
 async fn main() -> SafeResult {
     simple_logger::init().unwrap();
     let args: StartMitm = argh::from_env();
-    let mut capturer = Wrapper {
+    let capturer = Wrapper {
         inner: Arc::new(Mutex::new(HarCapturer::new())),
     };
     let result = timeout(

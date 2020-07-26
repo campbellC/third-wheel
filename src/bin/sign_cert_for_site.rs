@@ -10,7 +10,7 @@ fn run_sign_certificate_for_domain(
     key_file: &str,
     domain: &str,
 ) -> SafeResult {
-    let ca = CA::load_from_pem_files(cert_file, key_file)?;
+    let ca = CertificateAuthority::load_from_pem_files(cert_file, key_file)?;
     let site_cert = create_signed_certificate_for_domain(domain, &ca)?;
 
     let mut site_cert_file = File::create(outfile)?;

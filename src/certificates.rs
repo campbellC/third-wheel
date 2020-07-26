@@ -12,12 +12,16 @@ use openssl::stack::Stack;
 use openssl::x509::extension::{AuthorityKeyIdentifier, SubjectAlternativeName};
 use openssl::x509::{GeneralNameRef, X509Name, X509NameRef, X509};
 
-pub struct CA {
+/// A certificate authority to use for impersonating websites during the
+/// man-in-the-middle.
+pub struct CertificateAuthority {
+    /// the certificate authority's self-signed certificate
     pub(self) cert: X509,
+    /// the private signing key for the certificate authority
     pub(self) key: PKey<Private>,
 }
 
-impl CA {
+impl CertificateAuthority {
     pub fn load_from_pem_files(
         cert_file: &str,
         key_file: &str,
@@ -32,7 +36,7 @@ impl CA {
         io::copy(&mut key_file, &mut key)?;
         let key = PKey::from_rsa(Rsa::private_key_from_pem(&key)?)?;
 
-        Ok(CA { cert, key })
+        Ok(CertificateAuthority { cert, key })
     }
 }
 
@@ -53,9 +57,14 @@ pub(crate) fn native_identity(certificate: &X509, key: &PKey<Private>) -> native
     native_tls::Identity::from_pkcs12(&pkcs, &"").unwrap()
 }
 
+/// Sign a certificate for this domain
+///
+/// This function does not intelligently spoof fields like in the mitm proxy because
+/// it does not call the actual domain to get that information. As such, this may be
+/// rejected by browsers.
 pub fn create_signed_certificate_for_domain(
     domain: &str,
-    ca: &CA,
+    ca: &CertificateAuthority,
 ) -> Result<X509, Box<dyn std::error::Error>> {
     let mut cert_builder = X509::builder()?;
 
@@ -137,7 +146,7 @@ fn copy_alt_names(in_cert: &X509) -> Option<SubjectAlternativeName> {
 
 pub(crate) fn spoof_certificate(
     certificate: &X509,
-    ca: &CA,
+    ca: &CertificateAuthority,
 ) -> Result<X509, Box<dyn std::error::Error>> {
     let mut cert_builder = X509::builder()?;
 

@@ -11,7 +11,7 @@ use tokio::stream::StreamExt;
 use tokio_native_tls::{TlsAcceptor, TlsStream};
 use tokio_util::codec::Framed;
 
-use crate::certificates::{load_key_from_file, native_identity, spoof_certificate, CA};
+use crate::certificates::{load_key_from_file, native_identity, spoof_certificate, CertificateAuthority};
 use crate::codecs::http11::{HttpClient, HttpServer};
 use crate::SafeResult;
 
@@ -21,11 +21,15 @@ use self::mitm::{MitmLayer, RequestCapture, ResponseCapture};
 use http::header::HeaderName;
 
 lazy_static! {
-    static ref CERT_AUTH: crate::certificates::CA =
-        CA::load_from_pem_files("ca/ca_certs/cert.pem", "ca/ca_certs/key.pem").unwrap();
+    static ref CERT_AUTH: crate::certificates::CertificateAuthority =
+        CertificateAuthority::load_from_pem_files("ca/ca_certs/cert.pem", "ca/ca_certs/key.pem").unwrap();
     static ref KEY: PKey<Private> = load_key_from_file("ca/ca_certs/key.pem").unwrap();
 }
 
+/// Run a man-in-the-middle TLS proxy
+///
+/// * `port` - port to accept requests from clients
+/// * `mitm` - A `MitmLayer` to capture and/or modify requests and responses
 pub async fn start_mitm<T>(port: u16, mitm: T) -> Result<(), Box<dyn std::error::Error>>
 where
     T: MitmLayer + std::marker::Sync + std::marker::Send + 'static + Clone,
@@ -72,7 +76,7 @@ async fn tls_mitm_wrapper(
 async fn tls_mitm(
     mut client_stream: Framed<TcpStream, HttpClient>,
     opening_request: Request<Vec<u8>>,
-    cert_auth: &CA,
+    cert_auth: &CertificateAuthority,
     private_key: &PKey<Private>,
     mut mitm: impl MitmLayer,
 ) -> SafeResult {
@@ -168,50 +172,4 @@ async fn connect_to_target(
     )
     .unwrap();
     (Framed::new(target_stream, HttpServer), certificate)
-}
-
-#[allow(clippy::module_name_repetitions)]
-pub async fn run_http_proxy(port: u16) -> Result<(), Box<dyn std::error::Error>> {
-    let addr = format!("127.0.0.1:{}", port);
-    info!("http proxy listening on {}", addr);
-    let addr = addr.parse::<SocketAddr>()?;
-
-    let mut listener = TcpListener::bind(&addr).await?;
-
-    loop {
-        let (stream, _) = listener.accept().await?;
-        tokio::spawn(async move {
-            let mut transport = Framed::new(stream, HttpClient);
-            while let Some(request) = transport.next().await {
-                match request {
-                    Ok(request) => {
-                        let host = String::from_utf8(Vec::from(
-                            request
-                                .headers()
-                                .iter()
-                                .find(|x| x.0 == "Host")
-                                .unwrap()
-                                .1
-                                .as_bytes(),
-                        ))
-                        .unwrap();
-
-                        let target_stream =
-                            TcpStream::connect(format!("{}:80", host)).await.unwrap();
-                        let mut target_transport = Framed::new(target_stream, HttpServer);
-                        target_transport.send(&request).await.unwrap();
-                        let response = target_transport
-                            .next()
-                            .await
-                            .unwrap()
-                            .expect("valid http response");
-                        transport.send(&response).await.unwrap();
-                    }
-                    Err(e) => {
-                        error!("{}", e);
-                    }
-                }
-            }
-        });
-    }
 }
