@@ -13,9 +13,9 @@
 third-wheel is a TLS man-in-the-middle proxy written in rust, with the aim of being lightweight and fast. It is currently in alpha stage.
 
 ### Usage
-third-wheel is a library so you can modify it's behaviour in order to capture traffic, or modify it en route. It also comes with some binaries which can be found in `src/bin`. These require the `binaries` feature to be switched on. FOr example, `trivial_mitm` simply proxies the traffic but does not do anything to it, you can run with `cargo run`. For example:
+third-wheel is a library so you can modify it's behaviour in order to capture traffic, or modify it en route. It also comes with some examples; you'll need to have run `set_up_and_validate_environment.sh` first as to generate the root certificates. The simplest example, `trivial_mitm`, simply proxies the traffic but does not do anything to it, you can run with `cargo run`. 
 ```
-cargo run --example trivial_mitm -- -h
+cargo run --example trivial_mitm -- --help
 ```
 will give you some hints. If you just want a TLS mitm proxy:
 ```
@@ -27,7 +27,13 @@ To test you can run curl against it with
 ```
 curl -x http://127.0.0.1:8080 https://google.com -vv --http1.1 --cacert ./ca/ca_certs/cert.pem -L
 ```
-from the third-wheel directory. You'll need to have run `set_up_and_validate_environment.sh` first as the root certificates are not generated on the fly yet.
+from the third-wheel directory.
+
+For something more exciting, use har-capturer to record a har file of the session:
+```
+cargo run --example har-capture -- --help
+```
+
 
 #### Development
 If you want to develop/use third-wheel while still in early stages you will need to generate the certificate authority certificates and check your local version of curl and openssl are working as expected. Run the `set_up_and_validate_environment.sh` script to do this.
