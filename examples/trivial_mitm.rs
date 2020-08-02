@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use async_trait::async_trait;
 
 use argh::FromArgs;
@@ -23,25 +22,14 @@ struct StartMitm {
 }
 
 struct EmptyCapturer;
-// Since this is the same crate we can actually impl MitmLayer for
-// Arc<EmptyCapturer> directly. However, since this code should also be an
-// example of how to use the library we wrap in a struct to show how to avoid
-// the orphan rules
-struct WrapperStruct (Arc<EmptyCapturer>);
-
-impl Clone for WrapperStruct {
-    fn clone(&self) -> Self {
-        WrapperStruct {0: Arc::clone(&self.0)}
-    }
-}
 
 #[async_trait]
-impl MitmLayer for WrapperStruct {
-    async fn capture_request(&mut self, _: &Request<Vec<u8>>) -> RequestCapture {
+impl MitmLayer for EmptyCapturer {
+    async fn capture_request(&self, _: &Request<Vec<u8>>) -> RequestCapture {
         RequestCapture::Continue
     }
     async fn capture_response(
-        &mut self,
+        &self,
         _: &Request<Vec<u8>>,
         _: &Response<Vec<u8>>,
     ) -> ResponseCapture {
@@ -53,10 +41,5 @@ impl MitmLayer for WrapperStruct {
 async fn main() -> SafeResult {
     let args: StartMitm = argh::from_env();
     let ca = CertificateAuthority::load_from_pem_files(&args.cert_file, &args.key_file)?;
-    start_mitm(
-        args.port,
-        WrapperStruct {0: Arc::new(EmptyCapturer {})},
-        ca,
-    )
-        .await
+    start_mitm(args.port, wrap_mitm_in_arc!(EmptyCapturer {}), ca).await
 }

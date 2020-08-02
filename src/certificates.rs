@@ -1,6 +1,6 @@
+use log::debug;
 use std::fs::File;
 use std::io;
-use log::debug;
 
 use openssl::asn1::Asn1Time;
 use openssl::bn::{BigNum, MsbOption};

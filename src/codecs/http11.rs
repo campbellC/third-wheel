@@ -35,8 +35,6 @@ use tokio_util::codec::{Decoder, Encoder};
 
 use super::body::BodyParser;
 
-
-
 pub(crate) struct HttpServer;
 
 impl Encoder<&Request<Vec<u8>>> for HttpServer {
@@ -144,7 +142,8 @@ impl Decoder for HttpServer {
                 Some((ref k, ref v)) => (k, v),
                 None => break,
             };
-            let value = unsafe { HeaderValue::from_maybe_shared_unchecked(pre_body.slice(v.0..v.1)) };
+            let value =
+                unsafe { HeaderValue::from_maybe_shared_unchecked(pre_body.slice(v.0..v.1)) };
             ret = ret.header(&pre_body[k.0..k.1], value);
         }
 
@@ -263,7 +262,8 @@ impl Decoder for HttpClient {
                 None => break,
             };
             //TODO: do we really need unsafe code here?!
-            let value = unsafe { HeaderValue::from_maybe_shared_unchecked(pre_body.slice(v.0..v.1)) };
+            let value =
+                unsafe { HeaderValue::from_maybe_shared_unchecked(pre_body.slice(v.0..v.1)) };
             ret = ret.header(&pre_body[k.0..k.1], value);
         }
 

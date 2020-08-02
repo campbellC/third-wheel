@@ -24,7 +24,11 @@ use http::header::HeaderName;
 ///
 /// * `port` - port to accept requests from clients
 /// * `mitm` - A `MitmLayer` to capture and/or modify requests and responses
-pub async fn start_mitm<T>(port: u16, mitm: T, ca: CertificateAuthority) -> Result<(), Box<dyn std::error::Error>>
+pub async fn start_mitm<T>(
+    port: u16,
+    mitm: T,
+    ca: CertificateAuthority,
+) -> Result<(), Box<dyn std::error::Error>>
 where
     T: MitmLayer + std::marker::Sync + std::marker::Send + 'static + Clone,
 {
@@ -45,7 +49,7 @@ where
                             transport,
                             proxy_opening_request,
                             mitm.clone(),
-                            ca.clone()
+                            ca.clone(),
                         ));
                     }
                 }
@@ -63,7 +67,7 @@ async fn tls_mitm_wrapper(
     client_stream: Framed<TcpStream, HttpClient>,
     opening_request: Request<Vec<u8>>,
     mitm: impl MitmLayer,
-    ca: Arc<CertificateAuthority>
+    ca: Arc<CertificateAuthority>,
 ) {
     tls_mitm(client_stream, opening_request, &ca, mitm)
         .await
@@ -74,7 +78,7 @@ async fn tls_mitm(
     mut client_stream: Framed<TcpStream, HttpClient>,
     opening_request: Request<Vec<u8>>,
     cert_auth: &Arc<CertificateAuthority>,
-    mut mitm: impl MitmLayer,
+    mitm: impl MitmLayer,
 ) -> SafeResult {
     let (host, port) = target_host_port(&opening_request);
     let (mut target_stream, server_certificate) = connect_to_target(&host, &port).await;

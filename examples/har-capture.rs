@@ -4,7 +4,7 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 use async_trait::async_trait;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use argh::FromArgs;
 use cookie::Cookie;
@@ -39,37 +39,17 @@ struct StartMitm {
 }
 
 struct HarCapturer {
-    entries: Vec<Entries>,
-}
-
-impl HarCapturer {
-    fn new() -> Self {
-        HarCapturer {
-            entries: Vec::new(),
-        }
-    }
-}
-
-struct Wrapper {
-    inner: Arc<Mutex<HarCapturer>>,
-}
-
-impl Clone for Wrapper {
-    fn clone(&self) -> Self {
-        return Wrapper {
-            inner: Arc::clone(&self.inner),
-        };
-    }
+    entries: Mutex<Vec<Entries>>,
 }
 
 #[async_trait]
-impl MitmLayer for Wrapper {
-    async fn capture_request(&mut self, _: &http::Request<Vec<u8>>) -> RequestCapture {
+impl MitmLayer for HarCapturer {
+    async fn capture_request(&self, _: &http::Request<Vec<u8>>) -> RequestCapture {
         RequestCapture::Continue
     }
 
     async fn capture_response(
-        &mut self,
+        &self,
         request: &http::Request<Vec<u8>>,
         response: &http::Response<Vec<u8>>,
     ) -> ResponseCapture {
@@ -99,7 +79,7 @@ impl MitmLayer for Wrapper {
             },
             pageref: None,
         };
-        self.inner.lock().unwrap().entries.push(entries);
+        self.entries.lock().unwrap().push(entries);
 
         ResponseCapture::Continue
     }
@@ -256,25 +236,26 @@ async fn main() -> SafeResult {
     simple_logger::init().unwrap();
     let args: StartMitm = argh::from_env();
     let ca = CertificateAuthority::load_from_pem_files(&args.cert_file, &args.key_file)?;
-    let capturer = Wrapper {
-        inner: Arc::new(Mutex::new(HarCapturer::new())),
+    let capturer = HarCapturer {
+        entries: Mutex::new(Vec::new()),
     };
+    let capturer = wrap_mitm_in_arc!(capturer);
     let result = timeout(
         Duration::from_secs(args.seconds_to_run_for),
         start_mitm(args.port, capturer.clone(), ca),
     )
     .await;
 
+    let entries = capturer
+        .entries
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|x| x.clone())
+        .collect();
     let out = har::Har {
         log: har::Spec::V1_2(v1_2::Log {
-            entries: capturer
-                .inner
-                .lock()
-                .unwrap()
-                .entries
-                .iter()
-                .map(|x| x.clone())
-                .collect(),
+            entries,
             browser: None,
             comment: None,
             pages: None,
