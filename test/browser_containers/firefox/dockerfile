@@ -1,5 +1,6 @@
 FROM ubuntu:18.04 as firefox_image
 
+
 USER root
 # Install Chromium and ChromeDriver
 RUN apt-get update && \

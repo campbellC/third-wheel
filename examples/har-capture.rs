@@ -232,7 +232,7 @@ fn parse_cookie(cookie_str: &str) -> v1_2::Cookies {
 }
 
 #[tokio::main]
-async fn main() -> SafeResult {
+async fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
     let args: StartMitm = argh::from_env();
     let ca = CertificateAuthority::load_from_pem_files(&args.cert_file, &args.key_file)?;

@@ -1,0 +1,11 @@
+FROM ubuntu:18.04 as pathod_image
+
+USER root
+
+RUN apt-get update && apt-get install -y wget
+RUN wget -q -O '/tmp/pathod-5.2-linux.tar.gz' 'https://snapshots.mitmproxy.org/5.2/pathod-5.2-linux.tar.gz'
+RUN tar -xvzf '/tmp/pathod-5.2-linux.tar.gz' -C /tmp
+
+
+COPY pathology_tests.sh /tmp/
+CMD /tmp/pathology_tests.sh

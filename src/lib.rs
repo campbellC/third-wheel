@@ -41,11 +41,10 @@ mod certificates;
 mod proxy;
 
 mod codecs;
+mod error;
 
 pub use crate::certificates::create_signed_certificate_for_domain;
 pub use crate::certificates::CertificateAuthority;
 pub use proxy::mitm::{MitmLayer, RequestCapture, ResponseCapture};
 pub use proxy::start_mitm;
-
-/// A poorly named result type. This will be replaced in https://github.com/campbellC/third-wheel/issues/17
-pub type SafeResult = Result<(), Box<dyn std::error::Error>>;
+pub use error::Error;

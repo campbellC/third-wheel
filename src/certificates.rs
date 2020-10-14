@@ -10,7 +10,9 @@ use openssl::pkey::{PKey, Private};
 use openssl::rsa::Rsa;
 use openssl::stack::Stack;
 use openssl::x509::extension::{AuthorityKeyIdentifier, SubjectAlternativeName};
-use openssl::x509::{GeneralNameRef, X509Name, X509NameRef, X509};
+use openssl::x509::{GeneralNameRef, X509Name, X509NameRef, X509, X509NameBuilder};
+
+use crate::error::Error;
 
 /// A certificate authority to use for impersonating websites during the
 /// man-in-the-middle.
@@ -25,7 +27,7 @@ impl CertificateAuthority {
     pub fn load_from_pem_files(
         cert_file: &str,
         key_file: &str,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, Error> {
         let mut cert_file = File::open(cert_file)?;
         let mut cert: Vec<u8> = vec![];
         io::copy(&mut cert_file, &mut cert)?;
@@ -40,13 +42,12 @@ impl CertificateAuthority {
     }
 }
 
-pub(crate) fn native_identity(certificate: &X509, key: &PKey<Private>) -> native_tls::Identity {
+pub(crate) fn native_identity(certificate: &X509, key: &PKey<Private>) -> Result<native_tls::Identity, Error> {
     let pkcs = Pkcs12::builder()
-        .build(&"", &"", key, certificate)
-        .unwrap()
-        .to_der()
-        .unwrap();
-    native_tls::Identity::from_pkcs12(&pkcs, &"").unwrap()
+        .build(&"", &"", key, certificate)?
+        .to_der()?;
+    let identity = native_tls::Identity::from_pkcs12(&pkcs, &"")?;
+    Ok(identity)
 }
 
 /// Sign a certificate for this domain
@@ -57,7 +58,7 @@ pub(crate) fn native_identity(certificate: &X509, key: &PKey<Private>) -> native
 pub fn create_signed_certificate_for_domain(
     domain: &str,
     ca: &CertificateAuthority,
-) -> Result<X509, Box<dyn std::error::Error>> {
+) -> Result<X509, Error> {
     let mut cert_builder = X509::builder()?;
 
     let mut host_name = X509Name::builder()?;
@@ -66,8 +67,8 @@ pub fn create_signed_certificate_for_domain(
 
     cert_builder.set_subject_name(&host_name)?;
     cert_builder.set_version(2)?;
-    cert_builder.set_not_before(&Asn1Time::days_from_now(0).unwrap())?;
-    cert_builder.set_not_after(&Asn1Time::days_from_now(365).unwrap())?;
+    cert_builder.set_not_before((Asn1Time::days_from_now(0)?).as_ref())?;
+    cert_builder.set_not_after((Asn1Time::days_from_now(365)?).as_ref())?;
 
     let serial_number = {
         let mut serial_number = BigNum::new()?;
@@ -94,8 +95,8 @@ pub fn create_signed_certificate_for_domain(
     Ok(cert_builder.build())
 }
 
-fn copy_name(in_name: &X509NameRef) -> X509Name {
-    let mut copy = X509Name::builder().unwrap();
+fn copy_name(in_name: &X509NameRef) -> Result<X509Name, Error> {
+    let mut copy: X509NameBuilder = X509Name::builder()?;
     for entry in in_name.entries() {
         copy.append_entry_by_nid(
             entry.object().nid(),
@@ -108,7 +109,7 @@ fn copy_name(in_name: &X509NameRef) -> X509Name {
         .expect("Failed to add entry by nid");
     }
 
-    copy.build()
+    Ok(copy.build())
 }
 
 fn copy_alt_names(in_cert: &X509) -> Option<SubjectAlternativeName> {
@@ -139,11 +140,11 @@ fn copy_alt_names(in_cert: &X509) -> Option<SubjectAlternativeName> {
 pub(crate) fn spoof_certificate(
     certificate: &X509,
     ca: &CertificateAuthority,
-) -> Result<X509, Box<dyn std::error::Error>> {
+) -> Result<X509, Error> {
     let mut cert_builder = X509::builder()?;
 
     let name: &X509NameRef = certificate.subject_name();
-    let host_name = copy_name(name);
+    let host_name = copy_name(name)?;
     cert_builder.set_subject_name(&host_name)?;
     cert_builder.set_not_before(certificate.not_before())?;
     cert_builder.set_not_after(certificate.not_after())?;

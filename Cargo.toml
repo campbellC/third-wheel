@@ -21,12 +21,14 @@ native-tls = "^0.2"
 tokio-native-tls = "0.1.0"
 log = "^0.4"
 async-trait = "^0.1"
+thiserror = "^1.0"
 
 [dev-dependencies]
 argh = "^0.1"
 simple_logger = "^1"
-har =  "^0.5"
-cookie =  "^0.14"
+har = "^0.5"
+cookie = "^0.14"
+hyper = "*"
 
 [dependencies.tokio]
 version = "0.2.21"

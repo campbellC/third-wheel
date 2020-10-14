@@ -38,7 +38,7 @@ impl MitmLayer for EmptyCapturer {
 }
 
 #[tokio::main]
-async fn main() -> SafeResult {
+async fn main() -> Result<(), Error> {
     let args: StartMitm = argh::from_env();
     let ca = CertificateAuthority::load_from_pem_files(&args.cert_file, &args.key_file)?;
     start_mitm(args.port, wrap_mitm_in_arc!(EmptyCapturer {}), ca).await

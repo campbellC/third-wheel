@@ -9,7 +9,7 @@ fn run_sign_certificate_for_domain(
     cert_file: &str,
     key_file: &str,
     domain: &str,
-) -> SafeResult {
+) -> Result<(), Error> {
     let ca = CertificateAuthority::load_from_pem_files(cert_file, key_file)?;
     let site_cert = create_signed_certificate_for_domain(domain, &ca)?;
 
@@ -42,7 +42,7 @@ struct SignRequest {
     ca_key_file: String,
 }
 
-fn main() -> SafeResult {
+fn main() -> Result<(), Error> {
     let up: SignRequest = argh::from_env();
     run_sign_certificate_for_domain(&up.outfile, &up.ca_cert_file, &up.ca_key_file, &up.domain)
 }

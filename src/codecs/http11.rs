@@ -101,10 +101,7 @@ impl Decoder for HttpServer {
                     body_parser = BodyParser::Chunked;
                 } else if header.name.to_lowercase() == "content-length" {
                     body_parser = BodyParser::ContentLength(
-                        String::from_utf8(header.value.to_vec())
-                            .unwrap()
-                            .parse()
-                            .unwrap(),
+                        String::from_utf8(header.value.to_vec())? .parse()? ,
                     )
                 }
                 let k = toslice(header.name.as_bytes());
