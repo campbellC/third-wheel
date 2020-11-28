@@ -8,6 +8,8 @@ pub enum Error {
     #[error("an error handling client requests")]
     RequestError(String),
     #[error(transparent)]
+    HyperError(#[from] hyper::error::Error),
+    #[error(transparent)]
     IOError(#[from] io::Error),
     #[error(transparent)]
     NativeTlsError(#[from] native_tls::Error,),

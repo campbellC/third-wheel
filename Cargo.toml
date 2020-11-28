@@ -6,7 +6,7 @@ edition = "2018"
 readme = "README.md"
 categories = ["network-programming", "command-line-utilities"]
 keywords = ["mitmproxy", "man-in-the-middle"]
-description = "third-wheel is a TLS man-in-the-middle proxy written in rust, with the aim of being lightweight and fast. It is currently in pre-alpha stage."
+description = "third-wheel is a TLS man-in-the-middle proxy written in rust, with the aim of being lightweight and fast. It is currently in alpha."
 repository = "https://www.github.com/campbellC/third-wheel"
 license = "MIT"
 
@@ -25,10 +25,9 @@ thiserror = "^1.0"
 
 [dev-dependencies]
 argh = "^0.1"
-simple_logger = "^1"
+simple_logger = "^1.11"
 har = "^0.5"
 cookie = "^0.14"
-hyper = "*"
 
 [dependencies.tokio]
 version = "0.2.21"
@@ -37,3 +36,7 @@ features = ["macros", "rt-threaded", "tcp", "io-util", "tcp", "dns", "time"]
 [dependencies.tokio-util]
 version = "0.3.1"
 features = ["codec"]
+
+[dependencies.hyper]
+version = "^0.13.9"
+features = ["stream"]
