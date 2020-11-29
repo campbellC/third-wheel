@@ -1,6 +1,7 @@
 use std::io;
 use thiserror::Error as ThisError;
 
+#[allow(clippy::pub_enum_variant_names)]
 #[derive(ThisError, Debug)]
 pub enum Error {
     #[error("an error handling server responses")]

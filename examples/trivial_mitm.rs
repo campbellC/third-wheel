@@ -4,6 +4,7 @@ use argh::FromArgs;
 use http::{Request, Response};
 
 use third_wheel::*;
+use hyper::Body;
 
 /// Run a TLS mitm proxy that does no modification to the traffic
 #[derive(FromArgs)]
@@ -25,13 +26,12 @@ struct EmptyCapturer;
 
 #[async_trait]
 impl MitmLayer for EmptyCapturer {
-    async fn capture_request(&self, _: &Request<Vec<u8>>) -> RequestCapture {
+    async fn capture_request(&self, _: &Request<Body>) -> RequestCapture {
         RequestCapture::Continue
     }
     async fn capture_response(
         &self,
-        _: &Request<Vec<u8>>,
-        _: &Response<Vec<u8>>,
+        _: &Response<Body>,
     ) -> ResponseCapture {
         ResponseCapture::Continue
     }

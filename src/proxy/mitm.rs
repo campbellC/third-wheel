@@ -1,12 +1,13 @@
 use async_trait::async_trait;
 use http::{Request, Response};
+use hyper::Body;
 
 /// Action taken by `MitmLayer` on intercepting an outgoing request
 pub enum RequestCapture {
     /// In the case the mitm should not send the request to the domain. Note the TLS handshake will have already taken place
-    CircumventedResponse(Response<Vec<u8>>),
+    CircumventedResponse(Response<Body>),
     /// This request will be sent in place of the client's original request
-    ModifiedRequest(Request<Vec<u8>>),
+    ModifiedRequest(Request<Body>),
     /// Use in the case the mitm should send the original request
     Continue,
 }
@@ -14,7 +15,7 @@ pub enum RequestCapture {
 /// Action taken by `MitmLayer` on intercepting an incoming response
 pub enum ResponseCapture {
     /// This response will be sent to the client instead of the actual response from the server
-    ModifiedResponse(Response<Vec<u8>>),
+    ModifiedResponse(Response<Body>),
     /// Use in the case the mitm should not modify the original response
     Continue,
 }
@@ -23,11 +24,10 @@ pub enum ResponseCapture {
 #[allow(clippy::module_name_repetitions)]
 #[async_trait]
 pub trait MitmLayer {
-    async fn capture_request(&self, request: &Request<Vec<u8>>) -> RequestCapture;
+    async fn capture_request(&self, request: &Request<Body>) -> RequestCapture;
     async fn capture_response(
         &self,
-        request: &Request<Vec<u8>>,
-        response: &Response<Vec<u8>>,
+        response: &Response<Body>,
     ) -> ResponseCapture;
 }
 
@@ -64,15 +64,14 @@ macro_rules! wrap_mitm_in_arc {
 
         #[async_trait]
         impl<T: MitmLayer + Send + Sync> MitmLayer for _ThirdWheelWrapper<T> {
-            async fn capture_request(&self, request: &Request<Vec<u8>>) -> RequestCapture {
+            async fn capture_request(&self, request: &Request<Body>) -> RequestCapture {
                 self.0.capture_request(request).await
             }
             async fn capture_response(
                 &self,
-                request: &Request<Vec<u8>>,
-                response: &Response<Vec<u8>>,
+                response: &Response<Body>,
             ) -> ResponseCapture {
-                self.0.capture_response(request, response).await
+                self.0.capture_response(response).await
             }
         }
         _ThirdWheelWrapper { 0: Arc::new($e) }
