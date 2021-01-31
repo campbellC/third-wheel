@@ -9,7 +9,7 @@ use openssl::pkcs12::Pkcs12;
 use openssl::pkey::{PKey, Private};
 use openssl::rsa::Rsa;
 use openssl::stack::Stack;
-use openssl::x509::extension::{AuthorityKeyIdentifier, SubjectAlternativeName};
+use openssl::x509::extension::SubjectAlternativeName;
 use openssl::x509::{GeneralNameRef, X509Name, X509NameRef, X509, X509NameBuilder};
 
 use crate::error::Error;
@@ -152,15 +152,6 @@ pub(crate) fn spoof_certificate(
             subject_alternative_name.build(&cert_builder.x509v3_context(Some(&ca.cert), None))?;
         cert_builder.append_extension(subject_alternative_name)?;
     }
-
-    // TODO: understand why these should be true or false
-    // it seems from the RFC for OCSP that these should be true but this needs looking into properly
-    // https://tools.ietf.org/html/rfc2560
-    let authority_key_identifier = AuthorityKeyIdentifier::new()
-        .keyid(true)
-        .issuer(true)
-        .build(&cert_builder.x509v3_context(Some(&ca.cert), None))?;
-    cert_builder.append_extension(authority_key_identifier)?;
 
     cert_builder.set_issuer_name(&ca.cert.issuer_name())?;
     cert_builder.set_pubkey(&ca.key)?;
