@@ -1,6 +1,7 @@
 use argh::FromArgs;
 use std::fs::File;
 use std::io::Write;
+use simple_logger::SimpleLogger;
 
 use third_wheel::*;
 

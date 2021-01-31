@@ -9,7 +9,7 @@ CARGO_ROOT=`./find_cargo_root.sh`
 
 if [ ! -f "$CARGO_ROOT/ca/ca_certs/cert.pem" ]; then
     pushd "$CARGO_ROOT/ca/ca_certs"
-    openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/C=US/ST=private/L=province/O=city/CN=hostname.example.com"
+    openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -passout pass:"third-wheel" -subj "/C=US/ST=private/L=province/O=city/CN=hostname.example.com"
     popd
 fi
 cp -r "$CARGO_ROOT/ca/ca_certs" ./browser_containers/chrome

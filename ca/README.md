@@ -25,8 +25,9 @@ In order to test this we need to:
 # Generate a ca certificate and private key
 The following generates key.pem and cert.pem which should be a self signed certificate along with the signing private key. The subject is set to some random defaults. I made this by sticking together [some](https://stackoverflow.com/questions/10175812/how-to-create-a-self-signed-certificate-with-openssl) [stackoverflow](https://stackoverflow.com/questions/21488845/how-can-i-generate-a-self-signed-certificate-with-subjectaltname-using-openssl) answers.
 
+Because of a bug on mac we need to use a password. Since this CA is not intended to be secure we just pass in the password directly.
 ```bash
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/C=US/ST=private/L=province/O=city/CN=hostname.example.com"
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -passout pass:"third-wheel" -subj "/C=US/ST=private/L=province/O=city/CN=hostname.example.com"
 ```
 # Sign a certificate with this certificate
 
