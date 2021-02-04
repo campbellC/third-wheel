@@ -70,7 +70,7 @@ where
                         RequestCapture::Continue => {}
                     }
 
-                    *request.uri_mut() = request.uri().path().parse()?;
+                    *request.uri_mut() = request.uri().path_and_query().as_str().parse()?;
                     // TODO: don't have this unnecessary overhead every time
                     let proxy_connection: HeaderName =
                         HeaderName::from_lowercase(b"proxy-connection")
