@@ -26,7 +26,7 @@ use crate::{
 };
 use http::header::HeaderName;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Server};
+use hyper::{Body, server::Server};
 
 pub(crate) mod mitm;
 
@@ -118,7 +118,7 @@ where
         let mitm = mitm.clone();
 
         async move {
-            Ok::<_, Error>(service_fn(move |req: Request<Body>| {
+            Ok::<_, Error>(service_fn(move |mut req: Request<Body>| {
                 let mut res = Response::new(Body::empty());
 
                 // The proxy can only handle CONNECT requests
@@ -133,7 +133,7 @@ where
                             let ca = ca.clone();
                             let mitm = mitm.clone();
                             tokio::task::spawn(async move {
-                                match req.into_body().on_upgrade().await {
+                                match hyper::upgrade::on(&mut req).await {
                                     Ok(upgraded) => {
                                         if let Err(e) =
                                             run_mitm_on_connection(upgraded, ca, &host, &port, mitm).await
