@@ -1,79 +1,52 @@
-use async_trait::async_trait;
-use http::{Request, Response};
-use hyper::Body;
+use http::{Request, Response, header::HeaderName};
+use hyper::{Body, client::conn::{ResponseFuture, SendRequest}, service::Service};
 
-/// Action taken by `MitmLayer` on intercepting an outgoing request
-pub enum RequestCapture {
-    /// In the case the mitm should not send the request to the domain. Note the TLS handshake will have already taken place
-    CircumventedResponse(Response<Body>),
-    /// This request will be sent in place of the client's original request
-    ModifiedRequest(Request<Body>),
-    /// Use in the case the mitm should send the original request
-    Continue,
+pub trait MakeMitm<T>
+where
+    T: Service<Request<Body>, Response = <ThirdWheel as Service<Request<Body>>>::Response>,
+{
+    fn new_mitm(&self, inner: ThirdWheel) -> T;
 }
 
-/// Action taken by `MitmLayer` on intercepting an incoming response
-pub enum ResponseCapture {
-    /// This response will be sent to the client instead of the actual response from the server
-    ModifiedResponse(Response<Body>),
-    /// Use in the case the mitm should not modify the original response
-    Continue,
+/// A service that will proxy traffic to a target server and return unmodified responses
+pub struct ThirdWheel {
+    inner: SendRequest<Body>,
 }
 
-/// Capture requests and responses in flight, modify them, intercept them or whatever is required.
-#[allow(clippy::module_name_repetitions)]
-#[async_trait]
-pub trait MitmLayer {
-    async fn capture_request(&self, request: &Request<Body>) -> RequestCapture;
-    async fn capture_response(
-        &self,
-        response: &Response<Body>,
-    ) -> ResponseCapture;
+impl ThirdWheel {
+    pub(crate) fn new(inner: SendRequest<Body>) -> Self {
+        Self { inner }
+    }
 }
 
-/// Quality of life macro to wrap `MitmLayer`'s in an Arc.
-///
-/// Since `MitmLayer`'s need to be shared between threads, it's common to wrap them in an Arc.
-/// The Orphan rules make this verbose with boiler plate so this macro does that lifting for you.
-/// Just define a struct that implements `MitmLayer` and then call `wrap_mitm_in_arc!` on an instance
-/// and it will define a new struct that can be passed into the mitm proxy functions by wrapping it in an Arc.
-/// See the examples for both immutable and mutable use cases.
+impl Service<Request<Body>> for ThirdWheel {
+    type Response = Response<Body>;
 
-#[macro_export]
-macro_rules! wrap_mitm_in_arc {
-    ($e:expr) => {{
-        use http::{Request, Response};
-        use std::ops::Deref;
-        use std::sync::Arc;
-        struct _ThirdWheelWrapper<T: MitmLayer + Send + Sync>(Arc<T>);
+    type Error = hyper::Error;
 
-        impl<T: MitmLayer + Send + Sync> Clone for _ThirdWheelWrapper<T> {
-            fn clone(&self) -> Self {
-                _ThirdWheelWrapper {
-                    0: Arc::clone(&self.0),
-                }
-            }
-        }
+    type Future = ResponseFuture;
 
-        impl<T: MitmLayer + Send + Sync> Deref for _ThirdWheelWrapper<T> {
-            type Target = Arc<T>;
-            fn deref(&self) -> &Self::Target {
-                &self.0
-            }
-        }
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx).map_err(Into::into)
+    }
 
-        #[async_trait]
-        impl<T: MitmLayer + Send + Sync> MitmLayer for _ThirdWheelWrapper<T> {
-            async fn capture_request(&self, request: &Request<Body>) -> RequestCapture {
-                self.0.capture_request(request).await
-            }
-            async fn capture_response(
-                &self,
-                response: &Response<Body>,
-            ) -> ResponseCapture {
-                self.0.capture_response(response).await
-            }
-        }
-        _ThirdWheelWrapper { 0: Arc::new($e) }
-    }};
+    fn call(&mut self, mut request: Request<Body>) -> Self::Future {
+        // TODO: remove unwraps
+        // TODO: verify exactly what the behaviour *should* be - should we just pass through the request uri as is
+        *request.uri_mut() = request
+            .uri()
+            .path_and_query()
+            .unwrap()
+            .as_str()
+            .parse()
+            .unwrap();
+        // TODO: don't have this unnecessary overhead every time
+        let proxy_connection: HeaderName = HeaderName::from_lowercase(b"proxy-connection")
+            .expect("Infallible: hardcoded header name");
+        request.headers_mut().remove(&proxy_connection);
+        self.inner.send_request(request)
+    }
 }

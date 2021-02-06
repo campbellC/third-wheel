@@ -1,12 +1,14 @@
-use hyper::client::conn::Builder;
 use hyper::server::conn::Http;
+use hyper::{
+    client::conn::Builder,
+    service::Service,
+};
 use openssl::x509::X509;
-use tokio::io::AsyncRead;
-use tokio::io::AsyncWrite;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
 use tokio::net::TcpStream;
-use tokio::sync::Mutex;
 
 use log::info;
 
@@ -16,30 +18,33 @@ use tokio_native_tls::{TlsAcceptor, TlsStream};
 
 use crate::certificates::spoof_certificate;
 use crate::error::Error;
-use crate::{RequestCapture, ResponseCapture};
 
 use log::error;
 
-use crate::{
-    certificates::{native_identity, CertificateAuthority},
-    MitmLayer,
-};
-use http::header::HeaderName;
+use crate::{certificates::{native_identity, CertificateAuthority}, proxy::mitm::{ThirdWheel, MakeMitm}};
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, server::Server};
+use hyper::{server::Server, Body};
 
 pub(crate) mod mitm;
 
-async fn run_mitm_on_connection<T, S>(
+
+async fn run_mitm_on_connection<S, T, U>(
     upgraded: S,
     ca: Arc<CertificateAuthority>,
     host: &str,
     port: &str,
-    mitm: T,
+    mitm_maker: T,
 ) -> Result<(), Error>
 where
-    T: MitmLayer + std::marker::Sync + std::marker::Send + 'static + Clone,
+    T: MakeMitm<U> + std::marker::Sync + std::marker::Send + 'static + Clone,
     S: AsyncRead + AsyncWrite + std::marker::Unpin + 'static,
+    U: Service<Request<Body>, Response = <ThirdWheel as Service<Request<Body>>>::Response>
+        + std::marker::Sync
+        + std::marker::Send
+        + 'static
+        + Clone,
+    U::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    <U as Service<Request<Body>>>::Future: Send,
 {
     let (target_stream, target_certificate) = connect_to_target_with_tls(host, port).await?;
     let certificate = spoof_certificate(&target_certificate, &ca)?;
@@ -53,42 +58,11 @@ where
     // TODO: will this run forever? Is this essentially a memory leak?
     tokio::spawn(connection.without_shutdown());
 
-    let request_sender = Arc::new(Mutex::new(request_sender));
+    let third_wheel = ThirdWheel::new(request_sender);
+    let mitm_layer = mitm_maker.new_mitm(third_wheel);
 
     Http::new()
-        .serve_connection(
-            client_stream,
-            service_fn(move |mut request: Request<Body>| {
-                let shared_sender = request_sender.clone();
-                let mitm = mitm.clone();
-                async move {
-                    match mitm.capture_request(&request).await {
-                        RequestCapture::CircumventedResponse(response) => {
-                            return Ok::<Response<Body>, Error>(response)
-                        }
-                        RequestCapture::ModifiedRequest(new_request) => request = new_request,
-                        RequestCapture::Continue => {}
-                    }
-
-                    *request.uri_mut() = request.uri().path().parse()?;
-                    // TODO: don't have this unnecessary overhead every time
-                    let proxy_connection: HeaderName =
-                        HeaderName::from_lowercase(b"proxy-connection")
-                            .expect("Infallible: hardcoded header name");
-                    request.headers_mut().remove(&proxy_connection);
-                    let mut request_sender = shared_sender.lock().await;
-                    let mut response = request_sender.send_request(request).await?;
-
-                    match mitm.capture_response(&response).await {
-                        ResponseCapture::ModifiedResponse(new_response) => {
-                            response = new_response;
-                        }
-                        ResponseCapture::Continue => {}
-                    }
-                    Ok::<Response<Body>, Error>(response)
-                }
-            }),
-        )
+        .serve_connection(client_stream, mitm_layer)
         .await
         .map_err(|err| err.into())
 }
@@ -97,9 +71,16 @@ where
 ///
 /// * `port` - port to accept requests from clients
 /// * `mitm` - A `MitmLayer` to capture and/or modify requests and responses
-pub async fn start_mitm<T>(port: u16, mitm: T, ca: CertificateAuthority) -> Result<(), Error>
+pub async fn start_mitm<T, U>(port: u16, mitm: T, ca: CertificateAuthority) -> Result<(), Error>
 where
-    T: MitmLayer + std::marker::Sync + std::marker::Send + 'static + Clone,
+    T: MakeMitm<U> + std::marker::Sync + std::marker::Send + 'static + Clone,
+    U: Service<Request<Body>, Response = <ThirdWheel as Service<Request<Body>>>::Response>
+        + std::marker::Sync
+        + std::marker::Send
+        + Clone
+        + 'static,
+    <U as Service<Request<Body>>>::Future: Send,
+    <U as Service<Request<Body>>>::Error: std::error::Error + Send + Sync + 'static,
 {
     let ca = Arc::new(ca);
     let addr = format!("127.0.0.1:{}", port);
@@ -136,7 +117,8 @@ where
                                 match hyper::upgrade::on(&mut req).await {
                                     Ok(upgraded) => {
                                         if let Err(e) =
-                                            run_mitm_on_connection(upgraded, ca, &host, &port, mitm).await
+                                            run_mitm_on_connection(upgraded, ca, &host, &port, mitm)
+                                                .await
                                         {
                                             error!("Proxy failed: {}", e)
                                         }
