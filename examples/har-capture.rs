@@ -300,7 +300,7 @@ async fn main() -> Result<(), Error> {
             pages: None,
             creator: v1_2::Creator {
                 name: "third-wheel".to_string(),
-                version: "0.3".to_string(),
+                version: "0.5".to_string(),
                 comment: None,
             },
         }),
