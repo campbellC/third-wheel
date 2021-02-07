@@ -1,6 +1,7 @@
 use http::{Request, Response, header::HeaderName};
 use hyper::{Body, client::conn::{ResponseFuture, SendRequest}, service::Service};
 
+/// A trait for a factory to produce new MITM layers. A new MITM will be produced per client-target pair
 pub trait MakeMitm<T>
 where
     T: Service<Request<Body>, Response = <ThirdWheel as Service<Request<Body>>>::Response>,
@@ -33,6 +34,9 @@ impl Service<Request<Body>> for ThirdWheel {
         self.inner.poll_ready(cx).map_err(Into::into)
     }
 
+    /// ThirdWheel performs very little modification of the request before
+    /// transmitting it, but it does remove the proxy-connection header to
+    /// ensure this is not passed to the target
     fn call(&mut self, mut request: Request<Body>) -> Self::Future {
         // TODO: remove unwraps
         // TODO: verify exactly what the behaviour *should* be - should we just pass through the request uri as is
