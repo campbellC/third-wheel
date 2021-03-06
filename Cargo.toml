@@ -33,7 +33,7 @@ cookie = "^0.14"
 
 [dependencies.tokio]
 version = "^1.0"
-features = ["macros", "rt-multi-thread", "io-util", "net", "time"]
+features = ["macros", "rt-multi-thread", "io-util", "net", "time", "sync"]
 
 [dependencies.tokio-util]
 version = "^0.6"

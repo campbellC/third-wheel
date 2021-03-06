@@ -10,7 +10,7 @@ use openssl::pkey::{PKey, Private};
 use openssl::rsa::Rsa;
 use openssl::stack::Stack;
 use openssl::x509::extension::SubjectAlternativeName;
-use openssl::x509::{GeneralNameRef, X509Name, X509NameRef, X509, X509NameBuilder};
+use openssl::x509::{GeneralNameRef, X509Name, X509NameBuilder, X509NameRef, X509};
 
 use crate::error::Error;
 
@@ -24,10 +24,7 @@ pub struct CertificateAuthority {
 }
 
 impl CertificateAuthority {
-    pub fn load_from_pem_files(
-        cert_file: &str,
-        key_file: &str,
-    ) -> Result<Self, Error> {
+    pub fn load_from_pem_files(cert_file: &str, key_file: &str) -> Result<Self, Error> {
         let mut cert_file = File::open(cert_file)?;
         let mut cert: Vec<u8> = vec![];
         io::copy(&mut cert_file, &mut cert)?;
@@ -36,13 +33,19 @@ impl CertificateAuthority {
         let mut key_file = File::open(key_file)?;
         let mut key: Vec<u8> = vec![];
         io::copy(&mut key_file, &mut key)?;
-        let key = PKey::from_rsa(Rsa::private_key_from_pem_passphrase(&key, &"third-wheel".as_bytes())?)?;
+        let key = PKey::from_rsa(Rsa::private_key_from_pem_passphrase(
+            &key,
+            &"third-wheel".as_bytes(),
+        )?)?;
 
         Ok(Self { cert, key })
     }
 }
 
-pub(crate) fn native_identity(certificate: &X509, key: &PKey<Private>) -> Result<native_tls::Identity, Error> {
+pub(crate) fn native_identity(
+    certificate: &X509,
+    key: &PKey<Private>,
+) -> Result<native_tls::Identity, Error> {
     let pkcs = Pkcs12::builder()
         .build(&"third-wheel", &"", key, certificate)?
         .to_der()?;

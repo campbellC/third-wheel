@@ -27,7 +27,7 @@ struct StartMitm {
 
 #[derive(Clone)]
 struct TrivialMitm {
-    inner: Arc<Mutex<ThirdWheel>>,
+    inner: ThirdWheel,
 }
 
 #[derive(Clone)]
@@ -35,33 +35,25 @@ struct TrivialMakeMitm;
 
 impl MakeMitm<TrivialMitm> for TrivialMakeMitm {
     fn new_mitm(&self, inner: ThirdWheel) -> TrivialMitm {
-        TrivialMitm{ inner: Arc::new(Mutex::new(inner)) }
+        TrivialMitm { inner }
     }
 }
 
 impl Service<Request<Body>> for TrivialMitm {
     type Response = Response<Body>;
-    type Error = hyper::Error;
-    type Future = Pin<Box<dyn Future<Output=Result<Response<Body>, Self::Error>> + Send + 'static>>;
+    type Error = Error;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Response<Body>, Self::Error>> + Send + 'static>>;
 
     fn poll_ready(
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        return if let Ok(mut third_wheel) = self.inner.try_lock() {
-            third_wheel.poll_ready(cx)
-        } else {
-            std::task::Poll::Pending
-        }
+        self.inner.poll_ready(cx)
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let shared_sender = self.inner.clone();
-        let fut = async move {
-            let mut sender = shared_sender.lock().await;
-            sender.call(req).await
-        };
-        return Box::pin(fut);
+        self.inner.call(req)
     }
 }
 
@@ -69,5 +61,5 @@ impl Service<Request<Body>> for TrivialMitm {
 async fn main() -> Result<(), Error> {
     let args: StartMitm = argh::from_env();
     let ca = CertificateAuthority::load_from_pem_files(&args.cert_file, &args.key_file)?;
-    start_mitm(args.port, TrivialMakeMitm{}, ca).await
+    start_mitm(args.port, TrivialMakeMitm {}, ca).await
 }

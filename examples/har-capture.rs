@@ -1,15 +1,15 @@
-use std::fs::File;
-use std::io::prelude::*;
-use std::time::Duration;
-use tokio::time::timeout;
-use tokio::sync::mpsc;
-use tokio::sync::Mutex;
-use std::sync::Arc;
-use std::pin::Pin;
 use futures::Future;
+use http::{Request, Response};
 use hyper::service::Service;
 use hyper::Body;
-use http::{Request, Response};
+use std::fs::File;
+use std::io::prelude::*;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio::sync::Mutex;
+use tokio::time::timeout;
 
 use argh::FromArgs;
 use cookie::Cookie;
@@ -43,28 +43,31 @@ struct StartMitm {
     key_file: String,
 }
 
-
 #[derive(Clone)]
 struct HarSender {
     inner: Arc<Mutex<ThirdWheel>>,
-    sender: mpsc::Sender<Entries>
+    sender: mpsc::Sender<Entries>,
 }
 
 #[derive(Clone)]
 struct MakeHarSender {
-    sender: mpsc::Sender<Entries>
+    sender: mpsc::Sender<Entries>,
 }
 
 impl MakeMitm<HarSender> for MakeHarSender {
     fn new_mitm(&self, inner: ThirdWheel) -> HarSender {
-        HarSender {inner: Arc::new(Mutex::new(inner)) , sender: self.sender.clone()}
+        HarSender {
+            inner: Arc::new(Mutex::new(inner)),
+            sender: self.sender.clone(),
+        }
     }
 }
 
 impl Service<Request<Body>> for HarSender {
     type Response = Response<Body>;
     type Error = hyper::Error;
-    type Future = Pin<Box<dyn Future<Output=Result<Response<Body>, Self::Error>> + Send + 'static>>;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Response<Body>, Self::Error>> + Send + 'static>>;
 
     fn poll_ready(
         &mut self,
@@ -74,7 +77,7 @@ impl Service<Request<Body>> for HarSender {
             third_wheel.poll_ready(cx)
         } else {
             std::task::Poll::Pending
-        }
+        };
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
@@ -134,7 +137,10 @@ impl Service<Request<Body>> for HarSender {
     }
 }
 
-async fn copy_from_http_request_to_har(parts: &http::request::Parts, body: Vec<u8>) -> v1_2::Request {
+async fn copy_from_http_request_to_har(
+    parts: &http::request::Parts,
+    body: Vec<u8>,
+) -> v1_2::Request {
     let method = parts.method.as_str().to_string();
     let url = format!("{}", parts.uri);
     let http_version = "HTTP/1.1".to_string(); // Hardcoded for now because third-wheel only handles HTTP/1.1
@@ -150,7 +156,8 @@ async fn copy_from_http_request_to_har(parts: &http::request::Parts, body: Vec<u
         sum + (headers.name.len() as i64 + headers.value.len() as i64)
     });
 
-    let cookies: Vec<v1_2::Cookies> = parts.headers
+    let cookies: Vec<v1_2::Cookies> = parts
+        .headers
         .iter()
         .filter(|(key, _)| key == &http::header::COOKIE)
         .map(|(_, value)| parse_cookie(value.to_str().unwrap()))
@@ -158,7 +165,8 @@ async fn copy_from_http_request_to_har(parts: &http::request::Parts, body: Vec<u
 
     let body = String::from_utf8(body).unwrap(); // TODO: handle other encodings correctly
     let body_size = body.len() as i64;
-    let mime_type = parts.headers
+    let mime_type = parts
+        .headers
         .iter()
         .filter(|(key, _)| key == &http::header::CONTENT_TYPE)
         .map(|(_, value)| value.to_str().unwrap().to_string())
@@ -189,7 +197,10 @@ async fn copy_from_http_request_to_har(parts: &http::request::Parts, body: Vec<u
     }
 }
 
-async fn copy_from_http_response_to_har(parts: &http::response::Parts, body: Vec<u8>) -> v1_2::Response {
+async fn copy_from_http_response_to_har(
+    parts: &http::response::Parts,
+    body: Vec<u8>,
+) -> v1_2::Response {
     let mut headers = Vec::new();
     for (name, value) in &parts.headers {
         headers.push(Headers {
@@ -202,7 +213,8 @@ async fn copy_from_http_response_to_har(parts: &http::response::Parts, body: Vec
         sum + (headers.name.len() as i64 + headers.value.len() as i64)
     });
 
-    let cookies: Vec<String> = parts.headers
+    let cookies: Vec<String> = parts
+        .headers
         .iter()
         .filter(|(key, _)| key == &http::header::SET_COOKIE)
         .map(|(_, value)| value.to_str().unwrap().to_string())
@@ -212,7 +224,8 @@ async fn copy_from_http_response_to_har(parts: &http::response::Parts, body: Vec
         .map(|cookie_string| parse_cookie(cookie_string))
         .collect();
 
-    let mime_type = parts.headers
+    let mime_type = parts
+        .headers
         .iter()
         .filter(|(key, _)| key == &http::header::CONTENT_TYPE)
         .map(|(_, value)| value.to_str().unwrap().to_string())
@@ -220,7 +233,8 @@ async fn copy_from_http_response_to_har(parts: &http::response::Parts, body: Vec
         .unwrap_or("".to_string());
 
     let redirect_url = if parts.status.is_redirection() {
-        parts.headers
+        parts
+            .headers
             .iter()
             .filter(|(key, _)| key == &http::header::LOCATION)
             .map(|(_, value)| value.to_str().unwrap_or("").to_string())
@@ -246,10 +260,7 @@ async fn copy_from_http_response_to_har(parts: &http::response::Parts, body: Vec
         charles_status: None, //TODO: once https://github.com/mandrean/har-rs/issues/13 is resolved remove this
         http_version,
         status: parts.status.as_u16() as i64,
-        status_text: parts.status
-            .canonical_reason()
-            .unwrap_or("")
-            .to_string(),
+        status_text: parts.status.canonical_reason().unwrap_or("").to_string(),
         cookies,
         headers,
         headers_size,
@@ -280,12 +291,12 @@ async fn main() -> Result<(), Error> {
     let args: StartMitm = argh::from_env();
     let ca = CertificateAuthority::load_from_pem_files(&args.cert_file, &args.key_file)?;
     let (sender, mut receiver) = mpsc::channel(100);
-    let make_har_sender = MakeHarSender{sender};
+    let make_har_sender = MakeHarSender { sender };
     let result = timeout(
         Duration::from_secs(args.seconds_to_run_for),
         start_mitm(args.port, make_har_sender, ca),
     )
-        .await;
+    .await;
 
     let mut entries = Vec::new();
     while let Some(entry) = receiver.recv().await {

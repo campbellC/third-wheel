@@ -1,8 +1,5 @@
 use hyper::server::conn::Http;
-use hyper::{
-    client::conn::Builder,
-    service::Service,
-};
+use hyper::{client::conn::Builder, service::Service};
 use openssl::x509::X509;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -21,12 +18,16 @@ use crate::error::Error;
 
 use log::error;
 
-use crate::{certificates::{native_identity, CertificateAuthority}, proxy::mitm::{ThirdWheel, MakeMitm}};
+use crate::{
+    certificates::{native_identity, CertificateAuthority},
+    proxy::mitm::{MakeMitm, ThirdWheel},
+};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{server::Server, Body};
 
-pub(crate) mod mitm;
+use self::mitm::RequestSendingSynchronizer;
 
+pub(crate) mod mitm;
 
 async fn run_mitm_on_connection<S, T, U>(
     upgraded: S,
@@ -57,8 +58,13 @@ where
         .await?;
     // TODO: will this run forever? Is this essentially a memory leak?
     tokio::spawn(connection.without_shutdown());
-
-    let third_wheel = ThirdWheel::new(request_sender);
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        RequestSendingSynchronizer::new(request_sender, receiver)
+            .run()
+            .await
+    });
+    let third_wheel = ThirdWheel::new(sender);
     let mitm_layer = mitm_maker.new_mitm(third_wheel);
 
     Http::new()

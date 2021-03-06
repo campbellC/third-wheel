@@ -13,7 +13,7 @@ pub enum Error {
     #[error(transparent)]
     IOError(#[from] io::Error),
     #[error(transparent)]
-    NativeTlsError(#[from] native_tls::Error,),
+    NativeTlsError(#[from] native_tls::Error),
     #[error(transparent)]
     OpenSslError(#[from] openssl::error::Error),
     #[error(transparent)]
@@ -21,5 +21,5 @@ pub enum Error {
     #[error("A string that should be utf-8 has the wrong encoding")]
     NonUtf8String(String),
     #[error(transparent)]
-    InvalidUri(#[from] http::uri::InvalidUri )
+    InvalidUri(#[from] http::uri::InvalidUri),
 }
