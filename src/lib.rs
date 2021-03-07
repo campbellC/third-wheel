@@ -45,7 +45,7 @@ mod error;
 pub use crate::certificates::create_signed_certificate_for_domain;
 pub use crate::certificates::CertificateAuthority;
 pub use error::Error;
-pub use proxy::mitm::{MakeMitm, ThirdWheel};
+pub use proxy::mitm::{mitm_layer, ThirdWheel};
 pub use proxy::start_mitm;
 
 pub use hyper;

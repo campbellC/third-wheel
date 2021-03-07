@@ -24,6 +24,7 @@ async-trait = "^0.1"
 thiserror = "^1.0"
 lazy_static = "^1.4"
 simple_logger = "^1.11"
+tower = "^0.4"
 
 [dev-dependencies]
 argh = "^0.1"

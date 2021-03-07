@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 use tokio::net::TcpStream;
+use tower::Layer;
 
 use log::info;
 
@@ -20,7 +21,7 @@ use log::error;
 
 use crate::{
     certificates::{native_identity, CertificateAuthority},
-    proxy::mitm::{MakeMitm, ThirdWheel},
+    proxy::mitm::ThirdWheel,
 };
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{server::Server, Body};
@@ -37,7 +38,7 @@ async fn run_mitm_on_connection<S, T, U>(
     mitm_maker: T,
 ) -> Result<(), Error>
 where
-    T: MakeMitm<U> + std::marker::Sync + std::marker::Send + 'static + Clone,
+    T: Layer<ThirdWheel, Service = U> + std::marker::Sync + std::marker::Send + 'static + Clone,
     S: AsyncRead + AsyncWrite + std::marker::Unpin + 'static,
     U: Service<Request<Body>, Response = <ThirdWheel as Service<Request<Body>>>::Response>
         + std::marker::Sync
@@ -56,8 +57,7 @@ where
     let (request_sender, connection) = Builder::new()
         .handshake::<TlsStream<TcpStream>, Body>(target_stream)
         .await?;
-    // TODO: will this run forever? Is this essentially a memory leak?
-    tokio::spawn(connection.without_shutdown());
+    tokio::spawn(connection);
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(async move {
         RequestSendingSynchronizer::new(request_sender, receiver)
@@ -65,7 +65,7 @@ where
             .await
     });
     let third_wheel = ThirdWheel::new(sender);
-    let mitm_layer = mitm_maker.new_mitm(third_wheel);
+    let mitm_layer = mitm_maker.layer(third_wheel);
 
     Http::new()
         .serve_connection(client_stream, mitm_layer)
@@ -79,7 +79,7 @@ where
 /// * `mitm` - A `MitmLayer` to capture and/or modify requests and responses
 pub async fn start_mitm<T, U>(port: u16, mitm: T, ca: CertificateAuthority) -> Result<(), Error>
 where
-    T: MakeMitm<U> + std::marker::Sync + std::marker::Send + 'static + Clone,
+    T: Layer<ThirdWheel, Service = U> + std::marker::Sync + std::marker::Send + 'static + Clone,
     U: Service<Request<Body>, Response = <ThirdWheel as Service<Request<Body>>>::Response>
         + std::marker::Sync
         + std::marker::Send

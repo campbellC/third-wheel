@@ -6,14 +6,7 @@ use http::{header::HeaderName, Request, Response};
 use hyper::{client::conn::SendRequest, service::Service, Body};
 use log::error;
 use tokio::sync::{mpsc, oneshot};
-
-/// A trait for a factory to produce new MITM layers. A new MITM will be produced per client-target pair
-pub trait MakeMitm<T>
-where
-    T: Service<Request<Body>, Response = <ThirdWheel as Service<Request<Body>>>::Response>,
-{
-    fn new_mitm(&self, inner: ThirdWheel) -> T;
-}
+use tower::Layer;
 
 pub(crate) struct RequestSendingSynchronizer {
     request_sender: SendRequest<Body>,
@@ -89,7 +82,7 @@ impl Service<Request<Body>> for ThirdWheel {
 
     fn poll_ready(
         &mut self,
-        cx: &mut std::task::Context<'_>,
+        _: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         std::task::Poll::Ready(Ok(()))
     }
@@ -111,4 +104,56 @@ impl Service<Request<Body>> for ThirdWheel {
         };
         return Box::pin(fut);
     }
+}
+
+#[derive(Clone)]
+pub struct MitmService<F: Clone, S: Clone> {
+    f: F,
+    inner: S,
+}
+
+impl<F, S> Service<Request<Body>> for MitmService<F, S>
+where
+    S: Service<Request<Body>, Error = crate::error::Error> + Clone,
+    F: FnMut(
+        Request<Body>,
+        S,
+    ) -> Pin<Box<dyn Future<Output = Result<Response<Body>, crate::error::Error>> + Send>> + Clone,
+{
+    type Response = Response<Body>;
+    type Error = crate::error::Error;
+
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        (self.f)(req, self.inner.clone())
+    }
+}
+
+#[derive(Clone)]
+pub struct MitmLayer<F: Clone> {
+    f: F,
+}
+
+impl<S: Clone, F: Clone> Layer<S> for MitmLayer<F> {
+    type Service = MitmService<F, S>;
+    fn layer(&self, inner: S) -> Self::Service {
+        MitmService {
+            f: self.f.clone(),
+            inner,
+        }
+    }
+}
+
+pub fn mitm_layer<F>(f: F) -> MitmLayer<F>
+where
+    F: FnMut(Request<Body>, ThirdWheel) -> Pin<Box<dyn Future<Output = Result<Response<Body>, crate::error::Error>> + Send>> + Clone, {
+    return MitmLayer {f}
 }
