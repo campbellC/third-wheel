@@ -1,14 +1,10 @@
-use futures::Future;
 use http::{Request, Response};
 use hyper::service::Service;
 use hyper::Body;
 use std::fs::File;
 use std::io::prelude::*;
-use std::pin::Pin;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio::sync::Mutex;
 use tokio::time::timeout;
 
 use argh::FromArgs;
@@ -41,100 +37,6 @@ struct StartMitm {
     /// pem file for private signing key for the certificate authority
     #[argh(option, short = 'k', default = "\"ca/ca_certs/key.pem\".to_string()")]
     key_file: String,
-}
-
-#[derive(Clone)]
-struct HarSender {
-    inner: Arc<Mutex<ThirdWheel>>,
-    sender: mpsc::Sender<Entries>,
-}
-
-#[derive(Clone)]
-struct MakeHarSender {
-    sender: mpsc::Sender<Entries>,
-}
-
-impl MakeMitm<HarSender> for MakeHarSender {
-    fn new_mitm(&self, inner: ThirdWheel) -> HarSender {
-        HarSender {
-            inner: Arc::new(Mutex::new(inner)),
-            sender: self.sender.clone(),
-        }
-    }
-}
-
-impl Service<Request<Body>> for HarSender {
-    type Response = Response<Body>;
-    type Error = hyper::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Response<Body>, Self::Error>> + Send + 'static>>;
-
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        return if let Ok(mut third_wheel) = self.inner.try_lock() {
-            third_wheel.poll_ready(cx)
-        } else {
-            std::task::Poll::Pending
-        };
-    }
-
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let third_wheel = self.inner.clone();
-        let sent_self = self.clone();
-        let fut = async move {
-            let (req_parts, req_body) = req.into_parts();
-
-            let body_bytes = hyper::body::to_bytes(req_body).await.unwrap().to_vec();
-            let mut copied_bytes = Vec::with_capacity(body_bytes.len());
-            copied_bytes.extend(&body_bytes);
-            let har_request = copy_from_http_request_to_har(&req_parts, copied_bytes).await;
-
-            let body = Body::from(hyper::body::Bytes::from(body_bytes));
-            let req = Request::<Body>::from_parts(req_parts, body);
-
-            let mut third_wheel = third_wheel.lock().await;
-            let response = third_wheel.call(req).await.unwrap();
-
-            let (res_parts, res_body) = response.into_parts();
-            let body_bytes: Vec<u8> = hyper::body::to_bytes(res_body).await.unwrap().to_vec();
-            let mut copied_bytes = Vec::with_capacity(body_bytes.len());
-            copied_bytes.extend(&body_bytes);
-            let har_response = copy_from_http_response_to_har(&res_parts, copied_bytes).await;
-
-            let body = Body::from(hyper::body::Bytes::from(body_bytes));
-            let response = Response::<Body>::from_parts(res_parts, body);
-
-            let entries = Entries {
-                request: har_request,
-                response: har_response,
-                time: 0.0,
-                server_ip_address: None,
-                connection: None,
-                comment: None,
-                started_date_time: "bla".to_string(),
-                cache: v1_2::Cache {
-                    before_request: None,
-                    after_request: None,
-                },
-                timings: v1_2::Timings {
-                    blocked: None,
-                    dns: None,
-                    connect: None,
-                    send: 0.0,
-                    wait: 0.0,
-                    receive: 0.0,
-                    ssl: None,
-                    comment: None,
-                },
-                pageref: None,
-            };
-            sent_self.sender.send(entries).await.unwrap();
-            Ok(response)
-        };
-        return Box::pin(fut);
-    }
 }
 
 async fn copy_from_http_request_to_har(
@@ -291,7 +193,61 @@ async fn main() -> Result<(), Error> {
     let args: StartMitm = argh::from_env();
     let ca = CertificateAuthority::load_from_pem_files(&args.cert_file, &args.key_file)?;
     let (sender, mut receiver) = mpsc::channel(100);
-    let make_har_sender = MakeHarSender { sender };
+
+    let make_har_sender = mitm_layer(move |req: Request<Body>, mut third_wheel: ThirdWheel| {
+        let sender = sender.clone();
+        let fut = async move {
+            let (req_parts, req_body) = req.into_parts();
+
+            let body_bytes = hyper::body::to_bytes(req_body).await.unwrap().to_vec();
+            let mut copied_bytes = Vec::with_capacity(body_bytes.len());
+            copied_bytes.extend(&body_bytes);
+            let har_request = copy_from_http_request_to_har(&req_parts, copied_bytes).await;
+
+            let body = Body::from(hyper::body::Bytes::from(body_bytes));
+            let req = Request::<Body>::from_parts(req_parts, body);
+
+            let response = third_wheel.call(req).await.unwrap();
+
+            let (res_parts, res_body) = response.into_parts();
+            let body_bytes: Vec<u8> = hyper::body::to_bytes(res_body).await.unwrap().to_vec();
+            let mut copied_bytes = Vec::with_capacity(body_bytes.len());
+            copied_bytes.extend(&body_bytes);
+            let har_response = copy_from_http_response_to_har(&res_parts, copied_bytes).await;
+
+            let body = Body::from(hyper::body::Bytes::from(body_bytes));
+            let response = Response::<Body>::from_parts(res_parts, body);
+
+            let entries = Entries {
+                request: har_request,
+                response: har_response,
+                time: 0.0,
+                server_ip_address: None,
+                connection: None,
+                comment: None,
+                started_date_time: "bla".to_string(),
+                cache: v1_2::Cache {
+                    before_request: None,
+                    after_request: None,
+                },
+                timings: v1_2::Timings {
+                    blocked: None,
+                    dns: None,
+                    connect: None,
+                    send: 0.0,
+                    wait: 0.0,
+                    receive: 0.0,
+                    ssl: None,
+                    comment: None,
+                },
+                pageref: None,
+            };
+            sender.send(entries).await.unwrap();
+            Ok(response)
+        };
+        Box::pin(fut)
+    });
+
     let result = timeout(
         Duration::from_secs(args.seconds_to_run_for),
         start_mitm(args.port, make_har_sender, ca),

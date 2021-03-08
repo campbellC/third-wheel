@@ -116,9 +116,11 @@ impl<F, S> Service<Request<Body>> for MitmService<F, S>
 where
     S: Service<Request<Body>, Error = crate::error::Error> + Clone,
     F: FnMut(
-        Request<Body>,
-        S,
-    ) -> Pin<Box<dyn Future<Output = Result<Response<Body>, crate::error::Error>> + Send>> + Clone,
+            Request<Body>,
+            S,
+        )
+            -> Pin<Box<dyn Future<Output = Result<Response<Body>, crate::error::Error>> + Send>>
+        + Clone,
 {
     type Response = Response<Body>;
     type Error = crate::error::Error;
@@ -154,6 +156,12 @@ impl<S: Clone, F: Clone> Layer<S> for MitmLayer<F> {
 
 pub fn mitm_layer<F>(f: F) -> MitmLayer<F>
 where
-    F: FnMut(Request<Body>, ThirdWheel) -> Pin<Box<dyn Future<Output = Result<Response<Body>, crate::error::Error>> + Send>> + Clone, {
-    return MitmLayer {f}
+    F: FnMut(
+            Request<Body>,
+            ThirdWheel,
+        )
+            -> Pin<Box<dyn Future<Output = Result<Response<Body>, crate::error::Error>> + Send>>
+        + Clone,
+{
+    return MitmLayer { f };
 }

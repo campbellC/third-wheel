@@ -113,6 +113,8 @@ where
                     let target = target_host_port_from_connect(&req);
                     match target {
                         Ok((host, port)) => {
+                            // TODO: handle non-encrypted proxying
+                            // TODO: how to handle port != 80/443
                             // In the case of a TLS tunnel request we spawn a new
                             // service to handle the upgrade. This will only happen
                             // after the currently running function finishes so we need
