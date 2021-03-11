@@ -20,20 +20,12 @@ time = "0.1.42"
 native-tls = "^0.2"
 tokio-native-tls = "0.3.0"
 log = "^0.4"
-async-trait = "^0.1"
 thiserror = "^1.0"
-lazy_static = "^1.4"
 simple_logger = "^1.11"
 tower = "^0.4"
 
-[dev-dependencies]
-argh = "^0.1"
-simple_logger = "^1.11"
-har = "^0.5"
-cookie = "^0.14"
-
 [dependencies.tokio]
-version = "^1.0"
+version = "^1.2"
 features = ["macros", "rt-multi-thread", "io-util", "net", "time", "sync"]
 
 [dependencies.tokio-util]
@@ -43,3 +35,16 @@ features = ["codec"]
 [dependencies.hyper]
 version = "^0.14"
 features = ["stream", "tcp", "client", "server", "http1"]
+
+[dev-dependencies]
+argh = "^0.1"
+simple_logger = "^1.11"
+har = "^0.5"
+cookie = "^0.14"
+run_script = "^0.6"
+tokio-test = "*"
+reqwest = "*"
+
+[dev-dependencies.warp]
+version = "0.3"
+features = ["tls"]

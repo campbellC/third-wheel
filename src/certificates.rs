@@ -18,9 +18,9 @@ use crate::error::Error;
 /// man-in-the-middle.
 pub struct CertificateAuthority {
     /// the certificate authority's self-signed certificate
-    pub(crate) cert: X509,
+    pub cert: X509,
     /// the private signing key for the certificate authority
-    pub(crate) key: PKey<Private>,
+    pub key: PKey<Private>,
 }
 
 impl CertificateAuthority {

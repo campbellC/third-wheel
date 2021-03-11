@@ -1,5 +1,4 @@
 use argh::FromArgs;
-use simple_logger::SimpleLogger;
 use std::fs::File;
 use std::io::Write;
 

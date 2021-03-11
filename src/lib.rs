@@ -35,7 +35,6 @@
     clippy::todo,
     clippy::wrong_pub_self_convention
 )]
-#![allow(clippy::multiple_crate_versions)] // TODO: find out why we depend on two versions of winapi
 
 mod certificates;
 mod proxy;
@@ -45,7 +44,6 @@ mod error;
 pub use crate::certificates::create_signed_certificate_for_domain;
 pub use crate::certificates::CertificateAuthority;
 pub use error::Error;
-pub use proxy::mitm::{mitm_layer, ThirdWheel};
-pub use proxy::start_mitm;
+pub use proxy::{MitmProxy, mitm::{mitm_layer, ThirdWheel}};
 
 pub use hyper;

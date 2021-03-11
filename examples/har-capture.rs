@@ -247,10 +247,13 @@ async fn main() -> Result<(), Error> {
         };
         Box::pin(fut)
     });
+    let mitm_proxy = MitmProxy::builder(make_har_sender, ca).build();
+    let addr = format!("127.0.0.1:{}", args.port).parse().unwrap();
+    let (_, mitm_proxy) = mitm_proxy.bind(addr);
 
     let result = timeout(
         Duration::from_secs(args.seconds_to_run_for),
-        start_mitm(args.port, make_har_sender, ca),
+        mitm_proxy
     )
     .await;
 

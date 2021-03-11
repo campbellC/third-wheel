@@ -27,5 +27,8 @@ async fn main() -> Result<(), Error> {
     let ca = CertificateAuthority::load_from_pem_files(&args.cert_file, &args.key_file)?;
     let trivial_mitm =
         mitm_layer(|req: Request<Body>, mut third_wheel: ThirdWheel| third_wheel.call(req));
-    start_mitm(args.port, trivial_mitm, ca).await
+    let mitm_proxy = MitmProxy::builder(trivial_mitm, ca).build();
+    let (_, mitm_proxy_fut) = mitm_proxy.bind(format!("127.0.0.1:{}", args.port).parse().unwrap());
+    mitm_proxy_fut.await.unwrap();
+    Ok(())
 }
