@@ -44,6 +44,7 @@ cookie = "^0.14"
 run_script = "^0.6"
 tokio-test = "*"
 reqwest = "*"
+rand = "*"
 
 [dev-dependencies.warp]
 version = "0.3"

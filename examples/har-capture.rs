@@ -251,11 +251,7 @@ async fn main() -> Result<(), Error> {
     let addr = format!("127.0.0.1:{}", args.port).parse().unwrap();
     let (_, mitm_proxy) = mitm_proxy.bind(addr);
 
-    let result = timeout(
-        Duration::from_secs(args.seconds_to_run_for),
-        mitm_proxy
-    )
-    .await;
+    let result = timeout(Duration::from_secs(args.seconds_to_run_for), mitm_proxy).await;
 
     let mut entries = Vec::new();
     while let Some(entry) = receiver.recv().await {

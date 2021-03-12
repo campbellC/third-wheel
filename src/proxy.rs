@@ -57,6 +57,7 @@ macro_rules! make_service {
 
             async move {
                 Ok::<_, Error>(service_fn(move |mut req: Request<Body>| {
+                    log::info!("Received request to connect: {}", req.uri());
                     let mut res = Response::new(Body::empty());
 
                     // The proxy can only handle CONNECT requests
@@ -172,17 +173,17 @@ where
     }
 
     pub fn additional_root_certificates(
-        &mut self,
+        mut self,
         additional_root_certificates: Vec<Certificate>,
-    ) -> &mut Self {
+    ) -> Self {
         self.additional_root_certificates = additional_root_certificates;
         self
     }
 
     pub fn additional_host_mappings(
-        &mut self,
+        mut self,
         additional_host_mappings: HashMap<String, String>,
-    ) -> &mut Self {
+    ) -> Self {
         self.additional_host_mappings = additional_host_mappings;
         self
     }
@@ -292,11 +293,11 @@ async fn connect_to_target_with_tls(
     additional_host_mapping: HashMap<String, String>,
     additional_root_certificates: Vec<Certificate>,
 ) -> Result<(TlsStream<TcpStream>, X509), Error> {
-    let host = additional_host_mapping
+    let host_address = additional_host_mapping
         .get(host)
         .map(|s| s.as_str())
         .unwrap_or(host);
-    let target_stream = TcpStream::connect(format!("{}:{}", host, port)).await?;
+    let target_stream = TcpStream::connect(format!("{}:{}", host_address, port)).await?;
 
     let mut connector = native_tls::TlsConnector::builder();
     for root_certificate in additional_root_certificates {
