@@ -4,6 +4,7 @@ use openssl::{pkey::PKey, rsa::Rsa};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use run_script::{run_script, ScriptOptions};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, Write};
@@ -88,17 +89,62 @@ fn run_sign_certificate_for_domain(
     Ok(())
 }
 
-fn spawn_server(
+#[derive(Serialize, Deserialize)]
+pub struct MyRequest<'a> {
+    pub method: &'a str,
+    pub path: &'a str,
+    pub query_params: String,
+    pub headers: HashMap<String, Vec<String>>,
+    pub body: String,
+}
+
+fn get_warp_server(
     server_key_location: &str,
     server_cert_location: &str,
 ) -> (SocketAddr, oneshot::Sender<()>, impl Future<Output = ()>) {
+    use warp::http::Response;
     use warp::Filter;
 
-    // Match any request and return hello world!
-    let routes = warp::any().map(|| {
-        log::info!("Received request");
-        "Hello, World!"
-    });
+    // Code stolen from: https://github.com/seanmonstar/warp/issues/139
+    let routes = warp::any()
+        .and(warp::method())
+        .and(warp::path::full())
+        .and(
+            // Optional query string. See https://github.com/seanmonstar/warp/issues/86
+            warp::filters::query::raw()
+                .or(warp::any().map(|| String::default()))
+                .unify(),
+        )
+        .and(warp::header::headers_cloned())
+        .and(warp::body::bytes())
+        .map(
+            |method: hyper::http::Method,
+             path: warp::path::FullPath,
+             query_params: String,
+             headers: hyper::http::HeaderMap,
+             body: hyper::body::Bytes| {
+                let method = method.as_str();
+                let path = path.as_str();
+                let mut header_map = HashMap::new();
+                for (key, value) in headers {
+                    let entry = header_map
+                        .entry(key.unwrap().as_str().to_string())
+                        .or_insert(Vec::new());
+                    entry.push(value.to_str().unwrap().to_string());
+                }
+                let body = String::from_utf8(body.to_vec()).unwrap();
+
+                let request = MyRequest {
+                    method,
+                    path,
+                    query_params,
+                    headers: header_map,
+                    body,
+                };
+                Response::builder().body(serde_json::to_string(&request).unwrap())
+            },
+        );
+
     let addr: SocketAddr = "127.0.0.1:0"
         .parse()
         .expect("Infallible: hardcoded socket address");
@@ -133,7 +179,7 @@ pub struct Harness {
     pub client: reqwest::Client,
 }
 
-pub async fn set_up_for_test() -> Harness {
+pub async fn set_up_for_trivial_mitm_test() -> Harness {
     // set up certificates for third wheel and the test server
     let root_certificates = create_server_and_third_wheel_certificates();
     let server_cert_location = format!("{}/{}.pem", &root_certificates.base_dir, random_string());
@@ -149,7 +195,7 @@ pub async fn set_up_for_test() -> Harness {
     .unwrap();
 
     let (server_addr, server_killer, server) =
-        spawn_server(&root_certificates.server_key, &server_cert_location);
+        get_warp_server(&root_certificates.server_key, &server_cert_location);
 
     let mut host_mapping = HashMap::new();
     host_mapping.insert(test_domain_name.clone(), "127.0.0.1".to_string());
@@ -177,9 +223,9 @@ pub async fn set_up_for_test() -> Harness {
         .bind_with_graceful_shutdown("127.0.0.1:0".parse().unwrap(), async {
             receiver.await.ok().unwrap()
         });
-    log::info!("Initiating server");
+    log::info!("Initiating server for domain {}", &test_domain_name);
     tokio::spawn(server);
-    log::info!("Initiating mitm proxy");
+    log::info!("Initiating mitm proxy for domain {}", &test_domain_name);
     tokio::spawn(mitm_fut);
 
     let client = reqwest_client(
