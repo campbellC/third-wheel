@@ -32,21 +32,28 @@ impl RequestSendingSynchronizer {
 
     pub(crate) async fn run(&mut self) {
         while let Some((sender, mut request)) = self.receiver.recv().await {
-            // TODO: remove unwraps
-            // TODO: verify exactly what the behaviour *should* be - should we just pass through the request uri as is
-            *request.uri_mut() = request
+            let relativized_uri = request
                 .uri()
                 .path_and_query()
-                .unwrap()
-                .as_str()
-                .parse()
-                .unwrap();
-            // TODO: don't have this unnecessary overhead every time
-            let proxy_connection: HeaderName = HeaderName::from_lowercase(b"proxy-connection")
-                .expect("Infallible: hardcoded header name");
-            request.headers_mut().remove(&proxy_connection);
-            let response = self.request_sender.send_request(request);
-            if let Err(e) = sender.send(response.await.map_err(|e| e.into())) {
+                .ok_or_else(|| Error::RequestError("URI did not contain a path".to_string()))
+                .and_then(|path| {
+                    path.as_str()
+                        .parse()
+                        .map_err(|_| Error::RequestError("Given URI was invalid".to_string()))
+                });
+            let response_fut = relativized_uri.and_then(|path| {
+                *request.uri_mut() = path;
+                // TODO: don't have this unnecessary overhead every time
+                let proxy_connection: HeaderName = HeaderName::from_lowercase(b"proxy-connection")
+                    .expect("Infallible: hardcoded header name");
+                request.headers_mut().remove(&proxy_connection);
+                Ok(self.request_sender.send_request(request))
+            });
+            let response_to_send = match response_fut {
+                Ok(response) => response.await.map_err(|e| e.into()),
+                Err(e) => Err(e),
+            };
+            if let Err(e) = sender.send(response_to_send) {
                 error!("Requester not available to receive request {:?}", e);
             }
         }

@@ -30,7 +30,10 @@ async fn query_params_get_request() {
     let test_harness = harness::set_up_for_trivial_mitm_test().await;
     let response_body = test_harness
         .client
-        .get(format!("https:/{}/query?a=b&c=d", test_harness.test_site_and_port))
+        .get(format!(
+            "https:/{}/query?a=b&c=d",
+            test_harness.test_site_and_port
+        ))
         .send()
         .await
         .unwrap()
@@ -45,7 +48,6 @@ async fn query_params_get_request() {
     assert_eq!(deserialized.query_params, "a=b&c=d");
     assert_eq!(deserialized.body, "");
 }
-
 
 #[tokio::test]
 async fn post_body_correctly_sent() {
