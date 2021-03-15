@@ -10,9 +10,13 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::iter;
 use std::net::SocketAddr;
+use std::sync::Once;
+use simple_logger::SimpleLogger;
 use third_wheel::*;
 use tokio::sync::oneshot;
 use tower::Service;
+
+static INIT: Once = Once::new();
 
 fn random_string() -> String {
     let mut rng = thread_rng();
@@ -180,6 +184,7 @@ pub struct Harness {
 }
 
 pub async fn set_up_for_trivial_mitm_test() -> Harness {
+    INIT.call_once(|| SimpleLogger::new().init().unwrap());
     // set up certificates for third wheel and the test server
     let root_certificates = create_server_and_third_wheel_certificates();
     let server_cert_location = format!("{}/{}.pem", &root_certificates.base_dir, random_string());
