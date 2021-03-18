@@ -42,9 +42,9 @@ simple_logger = "^1.11"
 har = "^0.5"
 cookie = "^0.14"
 run_script = "^0.6"
-tokio-test = "*"
-reqwest = "*"
-rand = "*"
+tokio-test = "^0.4"
+reqwest = "^0.11"
+rand = "^0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 

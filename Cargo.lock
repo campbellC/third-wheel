@@ -1435,7 +1435,7 @@ dependencies = [
  "log",
  "native-tls",
  "openssl",
- "rand 0.7.3",
+ "rand 0.8.3",
  "reqwest",
  "run_script",
  "serde",
