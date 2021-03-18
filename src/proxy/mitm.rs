@@ -161,6 +161,14 @@ impl<S: Clone, F: Clone> Layer<S> for MitmLayer<F> {
     }
 }
 
+/// A convenience function for generating man-in-the-middle services
+///
+/// This function generates a struct that implements the necessary traits to be
+/// used as a man-in-the-middle service and will suffice for many use cases.
+/// ```ignore
+/// let mitm = mitm_layer(|req: Request<Body>, mut third_wheel: ThirdWheel| third_wheel.call(req));
+/// let mitm_proxy = MitmProxy::builder(mitm, ca).build();
+/// ```
 pub fn mitm_layer<F>(f: F) -> MitmLayer<F>
 where
     F: FnMut(

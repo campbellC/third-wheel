@@ -47,7 +47,7 @@ pub use crate::certificates::CertificateAuthority;
 pub use error::Error;
 pub use proxy::{
     mitm::{mitm_layer, ThirdWheel},
-    MitmProxy,
+    MitmProxy, MitmProxyBuilder,
 };
 
 pub use hyper;

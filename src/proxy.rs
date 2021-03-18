@@ -117,6 +117,12 @@ macro_rules! make_service {
     }};
 }
 
+/// The main struct of the crate. Start here.
+///
+/// This struct is the workhorse and main interface for third-wheel.
+/// By passing in a Mitm layer this can be customized to perform any required
+/// behavior on HTTP requests and responses. Use the `mitm_layer` function to
+/// easily construct services to pass in to this struct.
 pub struct MitmProxy<T, U>
 where
     T: Layer<ThirdWheel, Service = U> + std::marker::Sync + std::marker::Send + 'static + Clone,
@@ -131,9 +137,10 @@ where
     mitm_layer: T,
     ca: CertificateAuthority,
     additional_root_certificates: Vec<Certificate>,
-    additional_host_mappings: HashMap<String, String>,
+    additional_host_mappings: HashMap<String, String>, // TODO: this should be more restrictively typed
 }
 
+/// Builder interface for constructing `MitmProxy`'s
 pub struct MitmProxyBuilder<T, U>
 where
     T: Layer<ThirdWheel, Service = U> + std::marker::Sync + std::marker::Send + 'static + Clone,
@@ -172,6 +179,9 @@ where
         }
     }
 
+    /// Add root certificates that the proxy should trust when making outgoing
+    /// connections. This is in addition to the system certificates that are
+    /// already trusted.
     pub fn additional_root_certificates(
         mut self,
         additional_root_certificates: Vec<Certificate>,
@@ -180,6 +190,7 @@ where
         self
     }
 
+    /// Add mappings for particular hosts to IP addresses. Useful for testing against local TLS servers.
     pub fn additional_host_mappings(
         mut self,
         additional_host_mappings: HashMap<String, String>,
@@ -210,6 +221,8 @@ where
         }
     }
 
+    /// Bind to a socket address. Returns the address actually bound to, and the
+    /// future to be executed that will run the server.
     pub fn bind(self, addr: SocketAddr) -> (SocketAddr, impl Future<Output = Result<(), Error>>) {
         let server = Server::bind(&addr).serve(make_service!(self));
         (
@@ -218,6 +231,24 @@ where
         )
     }
 
+    /// The same as bind except in the event that signal completes the proxy
+    /// will gracefully terminate itself.
+    /// ```ignore
+    /// let trivial_mitm = MitmProxy::builder(
+    ///     mitm_layer(|req: Request<Body>, mut third_wheel: ThirdWheel| third_wheel.call(req)),
+    ///     third_wheel_ca,
+    /// ).build();
+
+    /// let (third_wheel_killer, receiver) = tokio::sync::oneshot::channel();
+    /// let (third_wheel_address, mitm_fut) = trivial_mitm
+    ///     .bind_with_graceful_shutdown("127.0.0.1:0".parse().unwrap(), async {
+    ///         receiver.await.ok().unwrap()
+    ///     });
+    /// tokio::spawn(mitm_fut);
+    /// // Wait for some stuff to happen
+    /// third_wheel_killer.send(()).unwrap();
+    /// // This kills the proxy
+    /// ```
     pub fn bind_with_graceful_shutdown<F>(
         self,
         addr: SocketAddr,
