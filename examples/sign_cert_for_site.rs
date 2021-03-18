@@ -9,8 +9,17 @@ fn run_sign_certificate_for_domain(
     cert_file: &str,
     key_file: &str,
     domain: &str,
+    passphrase: Option<String>,
 ) -> Result<(), Error> {
-    let ca = CertificateAuthority::load_from_pem_files(cert_file, key_file)?;
+    let ca = if let Some(passphrase) = passphrase {
+        CertificateAuthority::load_from_pem_files_with_passphrase_on_key(
+            cert_file,
+            key_file,
+            &passphrase,
+        )?
+    } else {
+        CertificateAuthority::load_from_pem_files(cert_file, key_file)?
+    };
     let site_cert = create_signed_certificate_for_domain(domain, &ca)?;
 
     let mut site_cert_file = File::create(outfile)?;
@@ -40,9 +49,19 @@ struct SignRequest {
     /// pem file containing ca key
     #[argh(option, short = 'k', default = "\"./ca/ca_certs/key.pem\".to_string()")]
     ca_key_file: String,
+
+    /// passphrase_for_key
+    #[argh(option, short = 'p')]
+    passphrase: Option<String>,
 }
 
 fn main() -> Result<(), Error> {
     let up: SignRequest = argh::from_env();
-    run_sign_certificate_for_domain(&up.outfile, &up.ca_cert_file, &up.ca_key_file, &up.domain)
+    run_sign_certificate_for_domain(
+        &up.outfile,
+        &up.ca_cert_file,
+        &up.ca_key_file,
+        &up.domain,
+        up.passphrase,
+    )
 }

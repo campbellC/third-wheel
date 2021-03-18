@@ -191,7 +191,11 @@ fn parse_cookie(cookie_str: &str) -> v1_2::Cookies {
 async fn main() -> Result<(), Error> {
     simple_logger::SimpleLogger::new().init().unwrap();
     let args: StartMitm = argh::from_env();
-    let ca = CertificateAuthority::load_from_pem_files(&args.cert_file, &args.key_file)?;
+    let ca = CertificateAuthority::load_from_pem_files_with_passphrase_on_key(
+        &args.cert_file,
+        &args.key_file,
+        "third-wheel",
+    )?;
     let (sender, mut receiver) = mpsc::channel(100);
 
     let make_har_sender = mitm_layer(move |req: Request<Body>, mut third_wheel: ThirdWheel| {

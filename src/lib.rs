@@ -1,7 +1,8 @@
 //! third-wheel is a TLS man-in-the-middle proxy library. Using the crate allows
 //! you to intercept, re-route, modify etc. in-flight HTTP requests and responses
-//! between clients and servers. Client code just needs to provide a struct that `impl`'s
-//! `MitmLayer`. The examples give a sense of how this library can be used.
+//! between clients and servers. Client code needs to provide a Layer that
+//! constructs a Service for intercepting requests and responses. `mitm_layer`
+//! provides a convenience function for producing these easily.
 
 //Rustc lints
 //<https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html>

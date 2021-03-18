@@ -84,8 +84,11 @@ fn run_sign_certificate_for_domain(
     cert_file: &str,
     key_file: &str,
     domain: &str,
+    passphrase: &str,
 ) -> Result<(), Error> {
-    let ca = CertificateAuthority::load_from_pem_files(cert_file, key_file)?;
+    let ca = CertificateAuthority::load_from_pem_files_with_passphrase_on_key(
+        cert_file, key_file, passphrase,
+    )?;
     let site_cert = create_signed_certificate_for_domain(domain, &ca)?;
 
     let mut site_cert_file = File::create(outfile)?;
@@ -196,6 +199,7 @@ pub async fn set_up_for_trivial_mitm_test() -> Harness {
         &root_certificates.server_root_cert,
         &root_certificates.server_key,
         &test_domain_name,
+        "third-wheel",
     )
     .unwrap();
 
@@ -209,9 +213,10 @@ pub async fn set_up_for_trivial_mitm_test() -> Harness {
         native_tls::Certificate::from_pem(&get_file_bytes(&root_certificates.server_root_cert))
             .unwrap();
 
-    let third_wheel_ca = CertificateAuthority::load_from_pem_files(
+    let third_wheel_ca = CertificateAuthority::load_from_pem_files_with_passphrase_on_key(
         &root_certificates.third_wheel_root_cert,
         &root_certificates.third_wheel_key,
+        "third-wheel",
     )
     .unwrap();
 

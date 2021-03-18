@@ -1,6 +1,6 @@
 use log::debug;
-use std::fs::File;
 use std::io;
+use std::{fs::File, path::Path};
 
 use openssl::asn1::Asn1Time;
 use openssl::bn::{BigNum, MsbOption};
@@ -15,7 +15,8 @@ use openssl::x509::{GeneralNameRef, X509Name, X509NameBuilder, X509NameRef, X509
 use crate::error::Error;
 
 /// A certificate authority to use for impersonating websites during the
-/// man-in-the-middle.
+/// man-in-the-middle. The client must trust the given certificate for it to
+/// trust the proxy.
 pub struct CertificateAuthority {
     /// the certificate authority's self-signed certificate
     pub cert: X509,
@@ -24,22 +25,46 @@ pub struct CertificateAuthority {
 }
 
 impl CertificateAuthority {
-    pub fn load_from_pem_files(cert_file: &str, key_file: &str) -> Result<Self, Error> {
-        let mut cert_file = File::open(cert_file)?;
-        let mut cert: Vec<u8> = vec![];
-        io::copy(&mut cert_file, &mut cert)?;
-        let cert = X509::from_pem(&cert)?;
+    /// Load certificate authority from PEM formatted files. The key file must
+    /// not require a passphrase (e.g. was created with the `-nodes` option on
+    /// openssl). NB: There is a bug/behaviour in Mac OS X that prevents opening
+    /// unencrypted key files.
+    pub fn load_from_pem_files<P: AsRef<Path>, Q: AsRef<Path>>(
+        cert_file: P,
+        key_file: Q,
+    ) -> Result<Self, Error> {
+        let cert = X509::from_pem(&get_bytes_from_file(cert_file)?)?;
 
-        let mut key_file = File::open(key_file)?;
-        let mut key: Vec<u8> = vec![];
-        io::copy(&mut key_file, &mut key)?;
+        let key = get_bytes_from_file(key_file)?;
+        let key = PKey::from_rsa(Rsa::private_key_from_pem(&key)?)?;
+
+        Ok(Self { cert, key })
+    }
+
+    /// Load certificate authority from PEM formatted files where the key file
+    /// is encrypted with a passphrase
+    pub fn load_from_pem_files_with_passphrase_on_key<P: AsRef<Path>, Q: AsRef<Path>>(
+        cert_file: P,
+        key_file: Q,
+        passphrase: &str,
+    ) -> Result<Self, Error> {
+        let cert = X509::from_pem(&get_bytes_from_file(cert_file)?)?;
+
+        let key = get_bytes_from_file(key_file)?;
         let key = PKey::from_rsa(Rsa::private_key_from_pem_passphrase(
             &key,
-            &"third-wheel".as_bytes(),
+            passphrase.as_bytes(),
         )?)?;
 
         Ok(Self { cert, key })
     }
+}
+
+fn get_bytes_from_file<P: AsRef<Path>>(path: P) -> Result<Vec<u8>, Error> {
+    let mut file = File::open(path)?;
+    let mut bytes: Vec<u8> = vec![];
+    io::copy(&mut file, &mut bytes)?;
+    Ok(bytes)
 }
 
 pub(crate) fn native_identity(
