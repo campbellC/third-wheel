@@ -32,12 +32,12 @@
     clippy::get_unwrap,
     clippy::mem_forget,
     clippy::nursery,
-    clippy::option_unwrap_used,
     clippy::pedantic,
-    clippy::result_unwrap_used,
+    clippy::unwrap_used,
     clippy::todo,
     clippy::wrong_pub_self_convention
 )]
+#![allow(clippy::clippy::module_name_repetitions)]
 
 mod certificates;
 mod proxy;
