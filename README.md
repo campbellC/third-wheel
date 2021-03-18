@@ -10,7 +10,7 @@
 [mit-url]: https://github.com/campbellC/third-wheel/blob/master/LICENSE
 
 ### third-wheel
-third-wheel is a TLS man-in-the-middle proxy written in rust, with the aim of being lightweight and fast. It is currently in alpha stage.
+third-wheel is a TLS man-in-the-middle proxy written in rust, with the aim of being lightweight and fast. It is currently in beta.
 
 ### Usage
 third-wheel is a library so you can modify it's behaviour in order to capture traffic, or modify it en route. It also comes with some examples; you'll need to have run `set_up_and_validate_environment.sh` first as to generate the root certificates. The simplest example, `trivial_mitm`, simply proxies the traffic but does not do anything to it, you can run with `cargo run`. 
@@ -42,7 +42,7 @@ If you want to develop/use third-wheel while still in early stages you will need
 The `test_against_chrome.sh` and `test_against_firefox.sh` scripts uses Docker, (Chromium|Firefox) and Selenium to test that the browsers are tricked by the mitm. It does most of the setup for you but you do need docker installed for it to work. It uses sudo to run docker because it doesn't assume you've modified the docker group - if you have done so feel free to delete the sudo's and then feel more confident running the script :)
 
 #### Planned Features
-* ~~Transparent HTTP Proxy~~
+* Transparent HTTP Proxy
 * Transparent HTTPS Proxy
 * ~~MITM Proxy trusted by standard curl~~
 * ~~MITM Proxy trusted by Chrome~~
