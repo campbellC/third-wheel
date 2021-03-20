@@ -37,12 +37,16 @@
     clippy::todo,
     clippy::wrong_pub_self_convention
 )]
-#![allow(clippy::clippy::module_name_repetitions)]
+#![allow(
+    clippy::clippy::module_name_repetitions,
+    clippy::clippy::missing_errors_doc,
+    clippy::clippy::clippy::redundant_pub_crate // https://github.com/rust-lang/rust-clippy/issues/5369
+)]
 
-mod certificates;
-mod proxy;
+pub(crate) mod certificates;
+pub(crate) mod proxy;
 
-mod error;
+pub(crate) mod error;
 
 pub use crate::certificates::create_signed_certificate_for_domain;
 pub use crate::certificates::CertificateAuthority;

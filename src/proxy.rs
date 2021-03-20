@@ -125,10 +125,10 @@ macro_rules! make_service {
 /// easily construct services to pass in to this struct.
 pub struct MitmProxy<T, U>
 where
-    T: Layer<ThirdWheel, Service = U> + std::marker::Sync + std::marker::Send + 'static + Clone,
+    T: Layer<ThirdWheel, Service = U> + Sync + std::marker::Send + 'static + Clone,
     U: Service<Request<Body>, Response = <ThirdWheel as Service<Request<Body>>>::Response>
-        + std::marker::Sync
-        + std::marker::Send
+        + Sync
+        + Send
         + Clone
         + 'static,
     <U as Service<Request<Body>>>::Future: Send,
@@ -143,10 +143,10 @@ where
 /// Builder interface for constructing `MitmProxy`'s
 pub struct MitmProxyBuilder<T, U>
 where
-    T: Layer<ThirdWheel, Service = U> + std::marker::Sync + std::marker::Send + 'static + Clone,
+    T: Layer<ThirdWheel, Service = U> + Sync + std::marker::Send + 'static + Clone,
     U: Service<Request<Body>, Response = <ThirdWheel as Service<Request<Body>>>::Response>
-        + std::marker::Sync
-        + std::marker::Send
+        + Sync
+        + Send
         + Clone
         + 'static,
     <U as Service<Request<Body>>>::Future: Send,
@@ -161,10 +161,10 @@ where
 // impl MitmProxyBuilder
 impl<T, U> MitmProxyBuilder<T, U>
 where
-    T: Layer<ThirdWheel, Service = U> + std::marker::Sync + std::marker::Send + 'static + Clone,
+    T: Layer<ThirdWheel, Service = U> + Sync + std::marker::Send + 'static + Clone,
     U: Service<Request<Body>, Response = <ThirdWheel as Service<Request<Body>>>::Response>
-        + std::marker::Sync
-        + std::marker::Send
+        + Sync
+        + Send
         + Clone
         + 'static,
     <U as Service<Request<Body>>>::Future: Send,
@@ -203,10 +203,10 @@ where
 // impl MitmProxy
 impl<T, U> MitmProxy<T, U>
 where
-    T: Layer<ThirdWheel, Service = U> + std::marker::Sync + std::marker::Send + 'static + Clone,
+    T: Layer<ThirdWheel, Service = U> + Sync + std::marker::Send + 'static + Clone,
     U: Service<Request<Body>, Response = <ThirdWheel as Service<Request<Body>>>::Response>
-        + std::marker::Sync
-        + std::marker::Send
+        + Sync
+        + Send
         + Clone
         + 'static,
     <U as Service<Request<Body>>>::Future: Send,
@@ -277,11 +277,11 @@ async fn run_mitm_on_connection<S, T, U>(
     additional_root_certificates: Vec<Certificate>,
 ) -> Result<(), Error>
 where
-    T: Layer<ThirdWheel, Service = U> + std::marker::Sync + std::marker::Send + 'static + Clone,
-    S: AsyncRead + AsyncWrite + std::marker::Unpin + 'static,
+    T: Layer<ThirdWheel, Service = U> + Sync + std::marker::Send + 'static + Clone,
+    S: AsyncRead + AsyncWrite + Unpin + 'static + Send,
     U: Service<Request<Body>, Response = <ThirdWheel as Service<Request<Body>>>::Response>
-        + std::marker::Sync
-        + std::marker::Send
+        + Sync
+        + Send
         + 'static
         + Clone,
     U::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
@@ -326,8 +326,7 @@ async fn connect_to_target_with_tls(
 ) -> Result<(TlsStream<TcpStream>, X509), Error> {
     let host_address = additional_host_mapping
         .get(host)
-        .map(|s| s.as_str())
-        .unwrap_or(host);
+        .map_or(host, std::string::String::as_str);
     let target_stream = TcpStream::connect(format!("{}:{}", host_address, port)).await?;
 
     let mut connector = native_tls::TlsConnector::builder();
@@ -359,15 +358,11 @@ fn target_host_port_from_connect(request: &Request<Body>) -> Result<(String, Str
         .uri()
         .host()
         .map(std::string::ToString::to_string)
-        .ok_or(Error::RequestError(
-            "No host found on CONNECT request".to_string(),
-        ))?;
+        .ok_or_else(|| Error::RequestError("No host found on CONNECT request".to_string()))?;
     let port = request
         .uri()
         .port()
         .map(|x| x.to_string())
-        .ok_or(Error::RequestError(
-            "No port found on CONNECT request".to_string(),
-        ))?;
+        .ok_or_else(|| Error::RequestError("No port found on CONNECT request".to_string()))?;
     Ok((host, port))
 }

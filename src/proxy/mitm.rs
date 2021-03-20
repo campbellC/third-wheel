@@ -8,21 +8,17 @@ use log::error;
 use tokio::sync::{mpsc, oneshot};
 use tower::Layer;
 
+type ResponseSender = oneshot::Sender<Result<Response<Body>, Error>>;
+
 pub(crate) struct RequestSendingSynchronizer {
     request_sender: SendRequest<Body>,
-    receiver: mpsc::UnboundedReceiver<(
-        oneshot::Sender<Result<Response<Body>, Error>>,
-        Request<Body>,
-    )>,
+    receiver: mpsc::UnboundedReceiver<(ResponseSender, Request<Body>)>,
 }
 
 impl RequestSendingSynchronizer {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         request_sender: SendRequest<Body>,
-        receiver: mpsc::UnboundedReceiver<(
-            oneshot::Sender<Result<Response<Body>, Error>>,
-            Request<Body>,
-        )>,
+        receiver: mpsc::UnboundedReceiver<(ResponseSender, Request<Body>)>,
     ) -> Self {
         Self {
             request_sender,
@@ -41,13 +37,13 @@ impl RequestSendingSynchronizer {
                         .parse()
                         .map_err(|_| Error::RequestError("Given URI was invalid".to_string()))
                 });
-            let response_fut = relativized_uri.and_then(|path| {
+            let response_fut = relativized_uri.map(|path| {
                 *request.uri_mut() = path;
                 // TODO: don't have this unnecessary overhead every time
                 let proxy_connection: HeaderName = HeaderName::from_lowercase(b"proxy-connection")
                     .expect("Infallible: hardcoded header name");
                 request.headers_mut().remove(&proxy_connection);
-                Ok(self.request_sender.send_request(request))
+                self.request_sender.send_request(request)
             });
             let response_to_send = match response_fut {
                 Ok(response) => response.await.map_err(|e| e.into()),
@@ -63,18 +59,12 @@ impl RequestSendingSynchronizer {
 /// A service that will proxy traffic to a target server and return unmodified responses
 #[derive(Clone)]
 pub struct ThirdWheel {
-    sender: mpsc::UnboundedSender<(
-        oneshot::Sender<Result<Response<Body>, Error>>,
-        Request<Body>,
-    )>,
+    sender: mpsc::UnboundedSender<(ResponseSender, Request<Body>)>,
 }
 
 impl ThirdWheel {
-    pub(crate) fn new(
-        sender: mpsc::UnboundedSender<(
-            oneshot::Sender<Result<Response<Body>, Error>>,
-            Request<Body>,
-        )>,
+    pub(crate) const fn new(
+        sender: mpsc::UnboundedSender<(ResponseSender, Request<Body>)>,
     ) -> Self {
         Self { sender }
     }
@@ -85,6 +75,7 @@ impl Service<Request<Body>> for ThirdWheel {
 
     type Error = crate::error::Error;
 
+    #[allow(clippy::clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(
@@ -94,7 +85,7 @@ impl Service<Request<Body>> for ThirdWheel {
         std::task::Poll::Ready(Ok(()))
     }
 
-    /// ThirdWheel performs very little modification of the request before
+    /// `ThirdWheel` performs very little modification of the request before
     /// transmitting it, but it does remove the proxy-connection header to
     /// ensure this is not passed to the target
     fn call(&mut self, request: Request<Body>) -> Self::Future {
@@ -109,7 +100,7 @@ impl Service<Request<Body>> for ThirdWheel {
                 .await
                 .map_err(|_| Error::ServerError("Failed to get response from server".to_string()))?
         };
-        return Box::pin(fut);
+        Box::pin(fut)
     }
 }
 
@@ -132,6 +123,7 @@ where
     type Response = Response<Body>;
     type Error = crate::error::Error;
 
+    #[allow(clippy::clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(
@@ -178,5 +170,5 @@ where
             -> Pin<Box<dyn Future<Output = Result<Response<Body>, crate::error::Error>> + Send>>
         + Clone,
 {
-    return MitmLayer { f };
+    MitmLayer { f }
 }

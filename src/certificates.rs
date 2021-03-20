@@ -72,9 +72,9 @@ pub(crate) fn native_identity(
     key: &PKey<Private>,
 ) -> Result<native_tls::Identity, Error> {
     let pkcs = Pkcs12::builder()
-        .build(&"third-wheel", &"", key, certificate)?
+        .build("third-wheel", "", key, certificate)?
         .to_der()?;
-    let identity = native_tls::Identity::from_pkcs12(&pkcs, &"third-wheel")?;
+    let identity = native_tls::Identity::from_pkcs12(&pkcs, "third-wheel")?;
     Ok(identity)
 }
 
@@ -110,7 +110,7 @@ pub fn create_signed_certificate_for_domain(
         .build(&cert_builder.x509v3_context(Some(&ca.cert), None))?;
     cert_builder.append_extension(subject_alternative_name)?;
 
-    cert_builder.set_issuer_name(&ca.cert.issuer_name())?;
+    cert_builder.set_issuer_name(ca.cert.issuer_name())?;
     cert_builder.set_pubkey(&ca.key)?;
     cert_builder.sign(&ca.key, MessageDigest::sha256())?;
 
@@ -181,15 +181,17 @@ pub(crate) fn spoof_certificate(
         cert_builder.append_extension(subject_alternative_name)?;
     }
 
-    cert_builder.set_issuer_name(&ca.cert.issuer_name())?;
+    cert_builder.set_issuer_name(ca.cert.issuer_name())?;
     cert_builder.set_pubkey(&ca.key)?;
     cert_builder.sign(&ca.key, MessageDigest::sha256())?;
 
     Ok(cert_builder.build())
 }
 
-#[allow(dead_code)]
+#[allow(dead_code, clippy::cognitive_complexity)]
 fn print_certificate(certificate: &X509) {
+    #![allow(clippy::unwrap_used)]
+
     debug!("New certificate");
 
     debug!("subject_name:");
@@ -204,7 +206,7 @@ fn print_certificate(certificate: &X509) {
     debug!("subject_alt_names");
     for general_name in certificate
         .subject_alt_names()
-        .unwrap_or_else(|| Stack::new().unwrap())
+        .unwrap_or_else(|| Stack::new().expect("Infallible"))
         .iter()
     {
         print_general_name(general_name);
@@ -213,7 +215,7 @@ fn print_certificate(certificate: &X509) {
     debug!("issuer_alt_names");
     for general_name in certificate
         .issuer_alt_names()
-        .unwrap_or_else(|| Stack::new().unwrap())
+        .unwrap_or_else(|| Stack::new().expect("Infallible"))
         .iter()
     {
         print_general_name(general_name);
