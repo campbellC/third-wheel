@@ -96,7 +96,7 @@ fn run_sign_certificate_for_domain(
     Ok(())
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct MyRequest<'a> {
     pub method: &'a str,
     pub path: &'a str,
@@ -168,7 +168,7 @@ fn get_warp_server(
         .key(key.private_key_to_pem_pkcs8().unwrap())
         .cert_path(server_cert_location)
         .bind_with_graceful_shutdown(addr, async { rx.await.ok().unwrap() });
-    return (server_address, tx, server);
+    (server_address, tx, server)
 }
 
 fn get_file_bytes(filename: &str) -> Vec<u8> {
@@ -184,6 +184,7 @@ pub struct Harness {
     server_killer: Option<oneshot::Sender<()>>,
     third_wheel_killer: Option<oneshot::Sender<()>>,
     pub client: reqwest::Client,
+    pub non_proxied_client: reqwest::Client,
 }
 
 pub async fn set_up_for_trivial_mitm_test() -> Harness {
@@ -203,12 +204,15 @@ pub async fn set_up_for_trivial_mitm_test() -> Harness {
     )
     .unwrap();
 
+    // Set up target echo server
     let (server_addr, server_killer, server) =
         get_warp_server(&root_certificates.server_key, &server_cert_location);
 
+    // Create a DNS override to the local server
     let mut host_mapping = HashMap::new();
     host_mapping.insert(test_domain_name.clone(), "127.0.0.1".to_string());
 
+    // Generate a server certificate
     let server_root_cert =
         native_tls::Certificate::from_pem(&get_file_bytes(&root_certificates.server_root_cert))
             .unwrap();
@@ -220,6 +224,7 @@ pub async fn set_up_for_trivial_mitm_test() -> Harness {
     )
     .unwrap();
 
+    // Set up a trivial pass-through mitm proxy
     let trivial_mitm = MitmProxy::builder(
         mitm_layer(|req: Request<Body>, mut third_wheel: ThirdWheel| third_wheel.call(req)),
         third_wheel_ca,
@@ -238,21 +243,28 @@ pub async fn set_up_for_trivial_mitm_test() -> Harness {
     log::info!("Initiating mitm proxy for domain {}", &test_domain_name);
     tokio::spawn(mitm_fut);
 
-    let client = reqwest_client(
+    let client = proxied_client(
         third_wheel_address,
         &root_certificates.third_wheel_root_cert,
+    );
+
+    let non_proxied_client = non_proxied_client(
+        &test_domain_name,
+        server_addr,
+        &root_certificates.server_root_cert,
     );
 
     Harness {
         test_site_and_port: format!("{}:{}", test_domain_name, server_addr.port()),
         client,
+        non_proxied_client,
         root_certificates,
         server_killer: Some(server_killer),
         third_wheel_killer: Some(third_wheel_killer),
     }
 }
 
-fn reqwest_client(
+fn proxied_client(
     third_wheel_addr: SocketAddr,
     third_wheel_cert_location: &str,
 ) -> reqwest::Client {
@@ -268,6 +280,20 @@ fn reqwest_client(
             .unwrap(),
         )
         .add_root_certificate(third_wheel_cert)
+        .build()
+        .unwrap()
+}
+
+fn non_proxied_client(
+    test_domain: &str,
+    server_addr: SocketAddr,
+    server_cert_location: &str,
+) -> reqwest::Client {
+    let server_cert =
+        reqwest::Certificate::from_pem(&get_file_bytes(server_cert_location)).unwrap();
+    reqwest::Client::builder()
+        .resolve(test_domain, server_addr)
+        .add_root_certificate(server_cert)
         .build()
         .unwrap()
 }
