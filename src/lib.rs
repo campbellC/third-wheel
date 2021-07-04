@@ -38,9 +38,9 @@
     clippy::wrong_pub_self_convention
 )]
 #![allow(
-    clippy::clippy::module_name_repetitions,
-    clippy::clippy::missing_errors_doc,
-    clippy::clippy::clippy::redundant_pub_crate // https://github.com/rust-lang/rust-clippy/issues/5369
+    clippy::module_name_repetitions,
+    clippy::missing_errors_doc,
+    clippy::redundant_pub_crate // https://github.com/rust-lang/rust-clippy/issues/5369
 )]
 
 pub(crate) mod certificates;

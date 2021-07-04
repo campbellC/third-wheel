@@ -75,7 +75,7 @@ impl Service<Request<Body>> for ThirdWheel {
 
     type Error = crate::error::Error;
 
-    #[allow(clippy::clippy::type_complexity)]
+    #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(
@@ -123,7 +123,7 @@ where
     type Response = Response<Body>;
     type Error = crate::error::Error;
 
-    #[allow(clippy::clippy::type_complexity)]
+    #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(
