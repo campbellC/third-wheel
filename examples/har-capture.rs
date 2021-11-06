@@ -180,7 +180,10 @@ fn parse_cookie(cookie_str: &str) -> v1_2::Cookies {
         value: parsed.value().to_string(),
         path: parsed.path().map(|p| p.to_string()),
         domain: parsed.domain().map(|d| d.to_string()),
-        expires: parsed.expires().map(|e| e.format("%F %r %z")), // TODO: ISO 8601 format
+        expires: parsed.expires().map(|e| match e {
+            cookie::Expiration::DateTime(datetime) => datetime.format("%F %r %z"),
+            cookie::Expiration::Session => "session".to_owned(),
+        }), // TODO: ISO 8601 format
         http_only: parsed.http_only(),
         secure: parsed.secure(),
         comment: None,
