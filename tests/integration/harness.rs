@@ -1,4 +1,4 @@
-use futures::Future;
+use futures::{Future, FutureExt, StreamExt};
 use hyper::{Body, Request};
 use openssl::{pkey::PKey, rsa::Rsa};
 use rand::distributions::Alphanumeric;
@@ -112,8 +112,19 @@ fn get_warp_server(
     use warp::http::Response;
     use warp::Filter;
 
+    // Code stolen from https://github.com/seanmonstar/warp/blob/master/examples/websockets.rs
+    let ws_route = warp::path("ws").and(warp::ws()).map(|ws: warp::ws::Ws| {
+        ws.on_upgrade(|websocket| {
+            let (tx, rx) = websocket.split();
+            rx.forward(tx).map(|result| {
+                if let Err(e) = result {
+                    eprintln!("websocket error: {:?}", e)
+                }
+            })
+        })
+    });
     // Code stolen from: https://github.com/seanmonstar/warp/issues/139
-    let routes = warp::any()
+    let echo_route = warp::any()
         .and(warp::method())
         .and(warp::path::full())
         .and(
@@ -151,6 +162,7 @@ fn get_warp_server(
                 Response::builder().body(serde_json::to_string(&request).unwrap())
             },
         );
+    let routes = ws_route.or(echo_route);
 
     let addr: SocketAddr = "127.0.0.1:0"
         .parse()
@@ -188,7 +200,7 @@ pub struct Harness {
 }
 
 pub async fn set_up_for_trivial_mitm_test() -> Harness {
-    INIT.call_once(|| SimpleLogger::new().init().unwrap());
+    //    INIT.call_once(|| SimpleLogger::new().init().unwrap());
     // set up certificates for third wheel and the test server
     let root_certificates = create_server_and_third_wheel_certificates();
     let server_cert_location = format!("{}/{}.pem", &root_certificates.base_dir, random_string());

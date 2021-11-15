@@ -5,7 +5,7 @@ async fn simple_get_request() {
     let test_harness = set_up_for_trivial_mitm_test().await;
     let response_body = test_harness
         .client
-        .get(format!("https:/{}/", test_harness.test_site_and_port))
+        .get(format!("https:/{}/echo", test_harness.test_site_and_port))
         .send()
         .await
         .unwrap()
@@ -16,7 +16,7 @@ async fn simple_get_request() {
     let deserialized: MyRequest = serde_json::from_str(&response_body).unwrap();
 
     assert_eq!(deserialized.method, "GET");
-    assert_eq!(deserialized.path, "/");
+    assert_eq!(deserialized.path, "/echo");
     assert_eq!(deserialized.query_params, "");
     assert_eq!(deserialized.body, "");
 
@@ -29,7 +29,7 @@ async fn query_params_get_request() {
     let response_body = test_harness
         .client
         .get(format!(
-            "https:/{}/query?a=b&c=d",
+            "https:/{}/echo/query?a=b&c=d",
             test_harness.test_site_and_port
         ))
         .send()
@@ -42,7 +42,7 @@ async fn query_params_get_request() {
     let deserialized: MyRequest = serde_json::from_str(&response_body).unwrap();
 
     assert_eq!(deserialized.method, "GET");
-    assert_eq!(deserialized.path, "/query");
+    assert_eq!(deserialized.path, "/echo/query");
     assert_eq!(deserialized.query_params, "a=b&c=d");
     assert_eq!(deserialized.body, "");
 }
@@ -53,7 +53,7 @@ async fn post_body_correctly_sent() {
     let body = "this is a body";
     let response_body = test_harness
         .client
-        .post(format!("https:/{}/", test_harness.test_site_and_port))
+        .post(format!("https://{}/echo", test_harness.test_site_and_port))
         .body(body)
         .send()
         .await
@@ -65,7 +65,7 @@ async fn post_body_correctly_sent() {
     let deserialized: MyRequest = serde_json::from_str(&response_body).unwrap();
 
     assert_eq!(deserialized.method, "POST");
-    assert_eq!(deserialized.path, "/");
+    assert_eq!(deserialized.path, "/echo");
     assert_eq!(deserialized.query_params, "");
     assert_eq!(deserialized.body, body);
 }
